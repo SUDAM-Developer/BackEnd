@@ -15,7 +15,7 @@ public enum GeneralErrorCode implements BaseErrorCode{
     METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "COMMON405", "지원하지 않는 HTTP 메서드입니다."),
     NOT_ACCEPTABLE(HttpStatus.NOT_ACCEPTABLE, "COMMON406", "응답할 수 있는 표현 형식이 없습니다."),
     CONFLICT(HttpStatus.CONFLICT, "COMMON409", "다른 요청이 먼저 처리되었습니다. 다시 시도해 주세요."),
-    PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "COMMON413", "요청 본문이 허용된 크기를 초과했습니다."),
+    CONTENT_TOO_LARGE(HttpStatus.CONTENT_TOO_LARGE, "COMMON413", "요청 본문이 허용된 크기를 초과했습니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "COMMON415", "지원하지 않는 Content-Type입니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON500", "서버 측 문제입니다."),
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "COMMON503", "일시적으로 요청을 처리할 수 없습니다."),
