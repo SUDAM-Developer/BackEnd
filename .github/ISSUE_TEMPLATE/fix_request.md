@@ -2,7 +2,7 @@
 name: 🐞 Bug Report
 about: 버그를 제보하고 재현/수정 정보를 남기는 템플릿
 title: "🐞[BUG] "
-labels: "bug"
+labels: "fix"
 assignees: ""
 ---
 

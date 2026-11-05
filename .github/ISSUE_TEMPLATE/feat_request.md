@@ -2,7 +2,7 @@
 name: ✨ Feature Request
 about: 새로운 기능 추가 요청을 위한 템플릿
 title: "✨[FEAT] "
-labels: "feature"
+labels: "feat"
 assignees: ""
 ---
 
