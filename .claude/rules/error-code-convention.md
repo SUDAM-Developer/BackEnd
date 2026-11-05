@@ -1,0 +1,67 @@
+---
+description: 성공/에러 코드와 예외 설계 — 코드 문자열 규칙, BaseErrorCode 구현, 예외 핸들러 확장
+paths:
+  - "src/main/java/com/sudam/global/code/**"
+  - "src/main/java/com/sudam/global/exception/**"
+  - "src/main/java/com/sudam/global/handler/**"
+  - "src/main/java/com/sudam/**/exception/**"
+---
+
+# 에러 코드 / 예외 컨벤션
+
+## 구조
+
+- `BaseSuccessCode` / `BaseErrorCode` 인터페이스: `getStatus()`, `getCode()`, `getMessage()`.
+- 공통 코드: `GeneralSuccessCode`(`COMMON200`, `COMMON201`), `GeneralErrorCode`(`COMMON400`~`COMMON503`).
+- 도메인/관심사별 코드는 별도 enum이 `BaseErrorCode`를 구현한다 (예: `global.security.exception.AuthErrorCode`).
+- 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`), 인증 흐름 예외는 `AuthException`(`OAuth2AuthenticationException` 상속).
+
+## 코드 문자열 규칙
+
+- 형식: `<접두사><HTTP 상태>` + 같은 상태가 둘 이상일 때만 `_<순번>`.
+  - 공통 코드는 상태당 하나뿐이므로 접미사 없음: `COMMON400`, `COMMON404`.
+  - 도메인 코드는 상태당 여러 개가 생기므로 `_1`부터 붙인다: `AUTH400_1`, `AUTH401_1`, `AUTH401_2`.
+- 접두사는 도메인/관심사 대문자 약어(`AUTH`, `USER`, ...). 새 도메인을 만들 때 접두사를 정하고 그 enum 안에서 일관되게 쓴다.
+- 이미 배포된 코드 문자열은 클라이언트 계약이다. 의미를 바꾸려면 새 코드를 추가하고, 기존 코드는 두거나 명시적으로 제거한다.
+- `message`는 사용자에게 보여줄 수 있는 한국어 한 문장. 스택트레이스·내부 식별자·SQL을 담지 않는다.
+
+## 새 에러 코드를 추가할 때
+
+1. 해당 도메인의 `exception` 패키지에 `XxxErrorCode` enum이 있는지 확인하고, 없으면 만든다.
+
+```java
+@Getter
+@RequiredArgsConstructor
+public enum UserErrorCode implements BaseErrorCode {
+
+    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "해당 사용자를 찾을 수 없습니다."),
+    ;
+
+    private final HttpStatus status;
+    private final String code;
+    private final String message;
+}
+```
+
+2. 서비스에서 `throw new ProjectException(UserErrorCode.USER_NOT_FOUND);`로 던진다.
+3. 상태 코드를 `GeneralErrorCode`에 없는 값으로 쓰려면, 스프링 표준 예외가 그 상태로 떨어질 수 있는지 확인한다 (`resolveErrorCode`가 매핑 테이블에 없는 상태를 `COMMON500`으로 떨어뜨린다).
+
+`GeneralErrorCode`에는 상태값당 하나의 상수만 둔다. `GeneralExceptionHandler.ERROR_CODE_BY_STATUS`가 `HttpStatus.value()`를 키로 `toUnmodifiableMap`을 만들기 때문에, 같은 상태를 가진 상수를 두 개 넣으면 **클래스 초기화 시 중복 키 `IllegalStateException`이 발생해 핸들러 빈 생성이 실패한다.** 상태당 여러 공통 메시지가 필요하면 `GeneralErrorCode`가 아니라 도메인 전용 enum에 추가한다.
+
+## 예외 처리 (`GeneralExceptionHandler`)
+
+`@RestControllerAdvice` + `ResponseEntityExceptionHandler` 상속 구조다. 계층은 아래 순서로 동작한다.
+
+| 대상 | 처리 지점 |
+| --- | --- |
+| `ProjectException` | `handleProjectException` — 코드의 status/code/message로 응답 |
+| `@RequestBody`·`@ModelAttribute` 검증/바인딩 실패 | `handleMethodArgumentNotValid` — `result`에 `{필드명: 메시지}` |
+| 단일 파라미터 타입 변환 실패 | `handleTypeMismatch` — `result`에 `{파라미터명: "타입이 올바르지 않습니다."}` |
+| 단일 파라미터 검증 실패 | `handleHandlerMethodValidationException` |
+| 그 외 스프링 표준 예외(깨진 JSON, 404/405/415, 필수 파라미터 누락 등) | `handleExceptionInternal` — 상태 → 공통 코드 역매핑 |
+| 미분류 예외 | `handleGlobalException` — `COMMON500` |
+
+- 컨트롤러·서비스에서 `ResponseEntity`로 에러를 직접 만들지 않는다. 예외를 던지고 핸들러가 포맷을 맡는다.
+- 핸들러를 새로 추가할 때는 로그 레벨 규칙을 지킨다: 클라이언트 잘못(4xx)은 `log.warn`, 서버 잘못(5xx)은 예외 객체를 함께 넘기는 `log.error`.
+- 로그 메시지는 `[말머리] code={}, message={}` 형태를 유지한다.
+- 새 `@ExceptionHandler`를 추가하기 전에, 이미 `ResponseEntityExceptionHandler`가 잡는 예외인지 확인한다. 중복으로 등록하면 어느 쪽이 이기는지 불분명해진다.
