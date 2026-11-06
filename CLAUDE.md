@@ -45,8 +45,8 @@ Boot 4에서 스타터가 개편되어, 예제에 흔히 나오는 Boot 3 이름
 
 ## 항상 지킬 짧은 규칙
 
-- 작업 브랜치는 `dev`에서 분기하고(`<라벨>/<kebab-case>/<이슈번호>`, 예: `feat/kakao-social-login/12`) PR도 `dev`로 올린다. `main`은 릴리스 전용.
-- PR 제목은 라벨 이모지 + 태그 + 요약 + 이슈 번호 형식: `✨[FEAT] 한국어 요약 (#12)`. 요청받지 않으면 commit / push 하지 않는다. 라벨별 이모지 기준표는 `.claude/rules/github-convention.md`.
+- 작업 브랜치는 `dev`에서 분기하고(`<라벨>/<이슈번호>-<브랜치 내용>`, 예: `feat/12-kakao-social-login`) PR도 `dev`로 올린다. `main`은 릴리스 전용.
+- PR 제목은 라벨 이모지 + 태그 + 요약 + 이슈 번호 형식: `✨[FEAT] 한국어 요약 (#12)`. 커밋 메시지는 대괄호 없는 소문자 태그 + 이슈 번호 형식: `feat: 회원가입 API 추가 (#12)`. 요청받지 않으면 commit / push 하지 않는다. 라벨별 이모지 기준표는 `.claude/rules/github-convention.md`.
 - 주석·커밋·PR·이슈·문서는 **한국어**로 쓴다. 코드 식별자는 영어.
 - 설정은 `application.yaml`에 둔다 (`.properties` 아님). 프로파일별 설정은 `application-<profile>.yaml`.
 - Lombok은 main/test 소스셋 모두에 설정돼 있다 (`compileOnly` + `annotationProcessor`).
