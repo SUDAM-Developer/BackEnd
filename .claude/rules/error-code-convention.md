@@ -14,7 +14,33 @@ paths:
 - `BaseSuccessCode` / `BaseErrorCode` 인터페이스: `getStatus()`, `getCode()`, `getMessage()`.
 - 공통 코드: `GeneralSuccessCode`(`COMMON200`, `COMMON201`), `GeneralErrorCode`(`COMMON400`~`COMMON503`).
 - 도메인/관심사별 코드는 별도 enum이 `BaseErrorCode`를 구현한다 (예: `global.security.exception.AuthErrorCode`).
-- 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`), 인증 흐름 예외는 `AuthException`(`OAuth2AuthenticationException` 상속).
+- 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`)**을 상속받는 각 도메인 예외로 변환해서** 던진다. 인증 흐름 예외는 `AuthException`(`OAuth2AuthenticationException` 상속).
+
+## 도메인 예외 — `ProjectException`을 상속한다
+
+일반 비즈니스 예외는 `ProjectException`을 직접 던지지 않고, **도메인별 예외 클래스로 변환해서** 던진다. Member 도메인에서 터진 예외는 `MemberException extends ProjectException`으로 잡히게 하는 식이다.
+
+```java
+// com.sudam.domain.member.exception.MemberException
+public class MemberException extends ProjectException {
+
+    public MemberException(BaseErrorCode errorCode) {
+        super(errorCode);
+    }
+}
+```
+
+```java
+// 서비스
+throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
+```
+
+- 위치/이름: `domain.<도메인>.exception.<도메인>Exception`. 해당 도메인의 `<도메인>ErrorCode`와 같은 패키지에 둔다.
+- 생성자는 `BaseErrorCode` 하나만 받아 `super(errorCode)`로 넘긴다. 상태/코드/메시지는 전부 에러 코드 enum이 들고 있으므로 예외 클래스에 필드를 추가하지 않는다.
+- 도메인 예외는 자기 도메인의 에러 코드와 짝지어 던지는 것이 기본이다. `MemberException`에 `PostErrorCode`를 넣지 않는다.
+- `global` 공통 로직처럼 특정 도메인에 속하지 않는 예외만 `ProjectException`을 그대로 던진다.
+- `GeneralExceptionHandler.handleProjectException`이 `ProjectException` 하위 타입을 모두 잡으므로, **도메인 예외를 추가해도 핸들러를 손댈 필요가 없다.** 도메인별 `@ExceptionHandler`를 새로 만들지 않는다.
+- 도메인 예외를 만드는 이유는 응답이 달라지기 때문이 아니라 — 응답 포맷은 동일하다 — 스택트레이스와 호출부에서 **어느 도메인에서 터진 예외인지** 바로 드러나고, 필요할 때 도메인 단위로 catch할 수 있기 때문이다.
 
 ## 코드 문자열 규칙
 
@@ -32,9 +58,9 @@ paths:
 ```java
 @Getter
 @RequiredArgsConstructor
-public enum UserErrorCode implements BaseErrorCode {
+public enum MemberErrorCode implements BaseErrorCode {
 
-    USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER404_1", "해당 사용자를 찾을 수 없습니다."),
+    MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "MEMBER404_1", "해당 회원을 찾을 수 없습니다."),
     ;
 
     private final HttpStatus status;
@@ -43,8 +69,9 @@ public enum UserErrorCode implements BaseErrorCode {
 }
 ```
 
-2. 서비스에서 `throw new ProjectException(UserErrorCode.USER_NOT_FOUND);`로 던진다.
-3. 상태 코드를 `GeneralErrorCode`에 없는 값으로 쓰려면, 스프링 표준 예외가 그 상태로 떨어질 수 있는지 확인한다 (`resolveErrorCode`가 매핑 테이블에 없는 상태를 `COMMON500`으로 떨어뜨린다).
+2. 같은 패키지에 `<도메인>Exception extends ProjectException`이 있는지 확인하고, 없으면 만든다 (위 "도메인 예외" 절 참고).
+3. 서비스에서 `throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);`로 던진다.
+4. 상태 코드를 `GeneralErrorCode`에 없는 값으로 쓰려면, 스프링 표준 예외가 그 상태로 떨어질 수 있는지 확인한다 (`resolveErrorCode`가 매핑 테이블에 없는 상태를 `COMMON500`으로 떨어뜨린다).
 
 `GeneralErrorCode`에는 상태값당 하나의 상수만 둔다. `GeneralExceptionHandler.ERROR_CODE_BY_STATUS`가 `HttpStatus.value()`를 키로 `toUnmodifiableMap`을 만들기 때문에, 같은 상태를 가진 상수를 두 개 넣으면 **클래스 초기화 시 중복 키 `IllegalStateException`이 발생해 핸들러 빈 생성이 실패한다.** 상태당 여러 공통 메시지가 필요하면 `GeneralErrorCode`가 아니라 도메인 전용 enum에 추가한다.
 
@@ -54,7 +81,7 @@ public enum UserErrorCode implements BaseErrorCode {
 
 | 대상 | 처리 지점 |
 | --- | --- |
-| `ProjectException` | `handleProjectException` — 코드의 status/code/message로 응답 |
+| `ProjectException` 및 하위 도메인 예외(`MemberException` 등) | `handleProjectException` — 코드의 status/code/message로 응답 |
 | `@RequestBody`·`@ModelAttribute` 검증/바인딩 실패 | `handleMethodArgumentNotValid` — `result`에 `{필드명: 메시지}` |
 | 단일 파라미터 타입 변환 실패 | `handleTypeMismatch` — `result`에 `{파라미터명: "타입이 올바르지 않습니다."}` |
 | 단일 파라미터 검증 실패 | `handleHandlerMethodValidationException` |
