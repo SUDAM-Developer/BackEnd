@@ -5,3 +5,8 @@ spring:
         registration:
           kakao:
             redirect-uri: http://localhost:8080/login/oauth2/code/kakao
+
+app:
+  oauth2:
+    success-redirect-uri: http://localhost:8081/login/success
+    failure-redirect-uri: http://localhost:8081/login/failure
