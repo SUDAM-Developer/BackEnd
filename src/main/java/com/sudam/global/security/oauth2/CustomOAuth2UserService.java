@@ -1,10 +1,13 @@
 package com.sudam.global.security.oauth2;
 
-import com.sudam.domain.user.enums.Role;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.service.UserService;
 import com.sudam.global.security.exception.AuthErrorCode;
-import com.sudam.global.security.exception.AuthException;
+import com.sudam.global.security.exception.SocialLoginException;
 import com.sudam.global.security.oauth2.response.KakaoResponse;
 import com.sudam.global.security.oauth2.response.OAuth2Response;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
@@ -13,10 +16,12 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private static final String KAKAO_REGISTRATION_ID = "kakao";
@@ -25,6 +30,8 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private static final String KEY_PROFILE = "profile";
     private static final String KEY_NICKNAME = "nickname";
     private static final String KEY_EMAIL = "email";
+
+    private final UserService userService;
 
     /***
      * 함수 기능: 액세스 토큰으로 소셜 공급자의 사용자 정보를 조회하고, 인증 principal을 생성한다.
@@ -45,7 +52,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             case KAKAO_REGISTRATION_ID -> toKakaoResponse(oAuth2User.getAttributes());
             default -> {
                 log.warn("[소셜 로그인 실패] 지원하지 않는 소셜 로그인입니다. registrationId={}", registrationId);
-                throw new AuthException(AuthErrorCode.UNSUPPORTED_PROVIDER);
+                throw new SocialLoginException(AuthErrorCode.UNSUPPORTED_PROVIDER);
             }
         };
 
@@ -53,8 +60,12 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 oAuth2Response.getProvider(), oAuth2Response.getProviderId(),
                 oAuth2Response.getName(), oAuth2Response.getEmail());
 
-        // TODO: provider + providerId로 회원을 조회하고 없으면 저장한 뒤, 실제 userId/role을 주입한다.
-        return new CustomOAuth2User(1L, Role.USER);
+
+        Provider provider = Provider.valueOf(oAuth2Response.getProvider().toUpperCase(Locale.ROOT));
+        // 회원을 조회하고, 없으면 선생님으로 가입시킨다.
+        User user = userService.findOrCreate(provider, oAuth2Response.getProviderId(), oAuth2Response.getEmail());
+
+        return new CustomOAuth2User(user.getId(), user.getRole());
     }
 
     /***
@@ -75,7 +86,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         // 이메일·닉네임은 필수 동의 항목이다. 누락되면 인증을 중단한다.
         if (providerId == null || !StringUtils.hasText(email) || !StringUtils.hasText(name)) {
             log.warn("[소셜 로그인 실패] 필수 동의 항목이 누락되었습니다. providerId={}, email={}, name={}", providerId, email, name);
-            throw new AuthException(AuthErrorCode.REQUIRED_CONSENT_MISSING);
+            throw new SocialLoginException(AuthErrorCode.REQUIRED_CONSENT_MISSING);
         }
 
         return new KakaoResponse(String.valueOf(providerId), email, name);
