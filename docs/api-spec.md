@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-05
+> 최종 수정: 2026-11-11
 > 현재 구현된 REST 엔드포인트는 없다. Spring Security OAuth2 Client가 제공하는 로그인 경로만 열려 있다.
 > 작성 규칙은 `.claude/rules/api-convention.md`, 코드 체계는 `.claude/rules/error-code-convention.md`를 따른다.
 
@@ -71,6 +71,7 @@
 | `AUTH400_1` | 400 | 지원하지 않는 소셜 로그인입니다. |
 | `AUTH401_1` | 401 | 필수 동의 항목에 동의해야 로그인할 수 있습니다. |
 | `AUTH401_2` | 401 | 소셜 로그인에 실패했습니다. |
+| `AUTH401_3` | 401 | 유효하지 않은 토큰입니다. |
 
 <!-- TODO: 도메인이 추가되면 에러 코드 표를 도메인별로 덧붙인다. -->
 
@@ -97,11 +98,26 @@ Spring Security가 제공하는 경로. 카카오 인가 페이지로 리다이�
 | 인증 | 불필요 |
 
 카카오가 호출하는 경로. 성공 시 `OAuth2LoginSuccessHandler`, 실패 시 `OAuth2LoginFailureHandler`로 이어진다.
-현재 두 핸들러는 로그만 남긴다 — **JWT 발급과 리다이렉트는 미구현**이라 클라이언트에 전달되는 응답 본문이 없다.
+리다이렉트라 응답 본문을 쓸 수 없어 AT는 프래그먼트, RT는 `HttpOnly` 쿠키로 전달한다. 프론트 URI는 `app.oauth2.success-redirect-uri` / `app.oauth2.failure-redirect-uri`(프로파일별 설정)에서 읽는다.
+
+- 성공: `302 {프론트 성공 URI}#accessToken={AT}` + `Set-Cookie: refreshToken={RT}; Path=/; Max-Age=1209600; HttpOnly; SameSite=Lax`
+- 실패: `302 {프론트 실패 URI}#code={에러 코드}` (예: `#code=AUTH401_1`)
 
 필수 동의 항목: `profile_nickname`, `account_email`. 누락 시 `AUTH401_1`.
 
-<!-- TODO: JWT 발급 방식이 결정되면 토큰 전달 방법(쿠키/리다이렉트 파라미터)과 재발급·로그아웃 엔드포인트를 추가한다. -->
+### 인증이 필요한 요청
+
+`Authorization: Bearer {AT}` 헤더로 보낸다. `JwtAuthenticationFilter`가 서명·만료를 검증해 `SecurityContext`에 `CustomOAuth2User`를 채운다. 만료는 AT 30분 / RT 14일(`jwt.*` 설정).
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 토큰 없음 | 401 | `COMMON401` |
+| 만료·위조된 토큰, RT를 AT 자리에 보낸 경우 | 401 | `AUTH401_3` |
+| 인증은 됐지만 권한 부족 | 403 | `COMMON403` |
+
+공개 경로(`/oauth2/**`, `/login/**`)는 만료된 토큰을 함께 보내도 그대로 통과한다.
+
+<!-- TODO: AT 재발급·로그아웃 엔드포인트는 다음 이슈에서 추가한다. -->
 
 ---
 

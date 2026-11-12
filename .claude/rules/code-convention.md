@@ -25,8 +25,9 @@ com.sudam
     ├── code                # BaseSuccessCode / BaseErrorCode / General*
     ├── exception           # ProjectException 등 공통 예외
     ├── handler             # @RestControllerAdvice
-    ├── security            # SecurityConfig, oauth2, 인증 예외
-    └── config              # 그 외 설정 클래스
+    ├── entity              # BaseTimeEntity 등 공통 매핑
+    ├── security            # oauth2, filter, util, 인증 예외
+    └── config              # SecurityConfig, JpaConfig 등 설정 클래스
 ```
 
 - 새 기능은 먼저 **어느 도메인인지** 정하고 `domain.<도메인>` 아래에 레이어별로 배치한다. 공통으로 두 도메인 이상이 쓰는 것만 `global`로 올린다.

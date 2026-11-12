@@ -1,22 +1,29 @@
 package com.sudam.global.security.oauth2;
 
-import com.sudam.domain.user.enums.Role;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.service.UserService;
 import com.sudam.global.security.exception.AuthErrorCode;
-import com.sudam.global.security.exception.AuthException;
+import com.sudam.global.security.exception.SocialLoginException;
 import com.sudam.global.security.oauth2.response.KakaoResponse;
 import com.sudam.global.security.oauth2.response.OAuth2Response;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionException;
 import org.springframework.util.StringUtils;
 
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private static final String KAKAO_REGISTRATION_ID = "kakao";
@@ -26,12 +33,14 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     private static final String KEY_NICKNAME = "nickname";
     private static final String KEY_EMAIL = "email";
 
+    private final UserService userService;
+
     /***
      * 함수 기능: 액세스 토큰으로 소셜 공급자의 사용자 정보를 조회하고, 인증 principal을 생성한다.
      * @param userRequest 공급자 등록 정보(registrationId, 엔드포인트)와 발급된 액세스 토큰을 담은 요청
      * @return 로그인한 회원의 userId와 권한을 담은 CustomOAuth2User
      * @throws OAuth2AuthenticationException 지원하지 않는 공급자이거나, 필수 동의 항목(이메일·닉네임)이
-     *         누락된 경우, OAuth2LoginFailureHandler로 전달된다
+     *         누락된 경우, 회원 조회·가입 중 DB 접근이 실패한 경우, OAuth2LoginFailureHandler로 전달된다
      */
     @Override
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
@@ -45,7 +54,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             case KAKAO_REGISTRATION_ID -> toKakaoResponse(oAuth2User.getAttributes());
             default -> {
                 log.warn("[소셜 로그인 실패] 지원하지 않는 소셜 로그인입니다. registrationId={}", registrationId);
-                throw new AuthException(AuthErrorCode.UNSUPPORTED_PROVIDER);
+                throw new SocialLoginException(AuthErrorCode.UNSUPPORTED_PROVIDER);
             }
         };
 
@@ -53,8 +62,19 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 oAuth2Response.getProvider(), oAuth2Response.getProviderId(),
                 oAuth2Response.getName(), oAuth2Response.getEmail());
 
-        // TODO: provider + providerId로 회원을 조회하고 없으면 저장한 뒤, 실제 userId/role을 주입한다.
-        return new CustomOAuth2User(1L, Role.USER);
+
+        Provider provider = Provider.valueOf(oAuth2Response.getProvider().toUpperCase(Locale.ROOT));
+        // 회원을 조회하고, 없으면 선생님으로 가입시킨다.
+        User user;
+        try {
+            user = userService.findOrCreate(provider, oAuth2Response.getProviderId(), oAuth2Response.getEmail());
+        } catch (DataAccessException | TransactionException e) {
+            log.error("[소셜 로그인 실패] 회원 조회·가입에 실패했습니다. provider={}, providerId={}",
+                    provider, oAuth2Response.getProviderId(), e);
+            throw new SocialLoginException(AuthErrorCode.SOCIAL_LOGIN_FAILED);
+        }
+
+        return new CustomOAuth2User(user.getId(), user.getRole());
     }
 
     /***
@@ -75,7 +95,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         // 이메일·닉네임은 필수 동의 항목이다. 누락되면 인증을 중단한다.
         if (providerId == null || !StringUtils.hasText(email) || !StringUtils.hasText(name)) {
             log.warn("[소셜 로그인 실패] 필수 동의 항목이 누락되었습니다. providerId={}, email={}, name={}", providerId, email, name);
-            throw new AuthException(AuthErrorCode.REQUIRED_CONSENT_MISSING);
+            throw new SocialLoginException(AuthErrorCode.REQUIRED_CONSENT_MISSING);
         }
 
         return new KakaoResponse(String.valueOf(providerId), email, name);
