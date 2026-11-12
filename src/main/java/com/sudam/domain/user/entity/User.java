@@ -50,7 +50,7 @@ public class User extends BaseTimeEntity {
     // 카카오 회원번호. 탈퇴 시 NULL.
     private String providerId;
 
-    // 논리 삭제 시각. 탈퇴 처리는 TODO
+    // 논리 삭제 시각.
     private LocalDateTime withdrawnAt;
 
     private User(Role role, Provider provider, String providerId, String email) {
@@ -70,5 +70,15 @@ public class User extends BaseTimeEntity {
      */
     public static User createTeacher(Provider provider, String providerId, String email) {
         return new User(Role.TEACHER, provider, providerId, email);
+    }
+
+    /***
+     * 함수 기능: 회원을 논리 삭제하고 개인정보·식별값을 파기한다 (ERD 공통 규칙).
+     *          provider_id가 NULL이 되므로 같은 소셜 계정으로 다시 로그인하면 새 회원으로 가입된다.
+     */
+    public void withdraw() {
+        this.withdrawnAt = LocalDateTime.now();
+        this.email = null;
+        this.providerId = null;
     }
 }
