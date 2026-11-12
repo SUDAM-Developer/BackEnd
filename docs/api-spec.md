@@ -1,7 +1,7 @@
 # API 명세
 
-> 최종 수정: 2026-11-11
-> 현재 구현된 REST 엔드포인트는 없다. Spring Security OAuth2 Client가 제공하는 로그인 경로만 열려 있다.
+> 최종 수정: 2026-11-12
+> 구현된 REST 엔드포인트는 토큰 재발급 · 로그아웃 · 회원 탈퇴 세 개다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
 > 작성 규칙은 `.claude/rules/api-convention.md`, 코드 체계는 `.claude/rules/error-code-convention.md`를 따른다.
 
 ## 공통
@@ -9,7 +9,8 @@
 - Base URL(로컬): `http://localhost:8080`
 - 모든 엔드포인트 prefix: `/api/v1`
 - 요청/응답 Content-Type: `application/json;charset=UTF-8`
-- `/oauth2/**`, `/login/**`을 제외한 모든 경로는 인증이 필요하다 (`SecurityConfig.allowUris`).
+- `/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger 경로(`/swagger-ui/**`, `/swagger-ui.html`, `/v3/api-docs/**`)를 제외한 모든 경로는 인증이 필요하다 (`SecurityConfig.allowUris`).
+- Swagger UI: `http://localhost:8080/swagger-ui.html`, OpenAPI 문서(JSON): `http://localhost:8080/v3/api-docs`. Swagger는 `@Tag`·`@Operation` 수준의 요약과 시험 호출용이고, **에러 코드별 응답과 쿠키·헤더 규칙은 이 문서가 기준이다.**
 
 ### 공통 응답 형식
 
@@ -146,7 +147,7 @@ Spring Security가 제공하는 경로. 카카오 인가 페이지로 리다이�
 
 필터는 서명·만료와 `typ=access`를 확인한 뒤, 토큰의 `jti`가 Redis 차단 목록(`bl:{jti}`)에 있는지 본다. `AUTH401_4`를 받으면 **재발급해도 실패하므로** 바로 로그인 화면으로 보낸다 (`AUTH401_3`과 달리 재시도 대상이 아니다).
 
-공개 경로(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`)는 만료된 토큰을 함께 보내도 그대로 통과한다.
+공개 경로(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger 경로)는 만료된 토큰을 함께 보내도 그대로 통과한다.
 
 ### 토큰 재발급
 

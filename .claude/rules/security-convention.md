@@ -13,7 +13,7 @@ paths:
 `SecurityConfig`의 단일 `SecurityFilterChain`:
 
 - `csrf`, `httpBasic`, `formLogin` 비활성화. 세션은 `SessionCreationPolicy.STATELESS`.
-- `allowUris`(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`)만 `permitAll`, 나머지는 `authenticated`. 재발급은 AT가 만료된 상태로 호출되므로 인증을 걸 수 없고, 인증 주체가 RT 쿠키다.
+- `allowUris`(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger 경로 `/swagger-ui/**`·`/swagger-ui.html`·`/v3/api-docs/**`)만 `permitAll`, 나머지는 `authenticated`. 재발급은 AT가 만료된 상태로 호출되므로 인증을 걸 수 없고, 인증 주체가 RT 쿠키다.
 - `oauth2Login`에 `CustomOAuth2UserService`(userInfo) + `OAuth2LoginSuccessHandler` + `OAuth2LoginFailureHandler`를 연결.
 - `JwtAuthenticationFilter`를 `UsernamePasswordAuthenticationFilter` 앞에 등록(빈이 아니라 `new`로 만들어 `JwtUtil`·`TokenStore`를 넘긴다). `exceptionHandling`에 `CustomAuthenticationEntryPoint`(401) + `CustomAccessDeniedHandler`(403) 연결.
 

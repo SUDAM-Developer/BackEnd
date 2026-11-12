@@ -51,7 +51,7 @@ com.sudam
     ├── handler
     │   └── GeneralExceptionHandler.java  # @RestControllerAdvice
     ├── entity/BaseTimeEntity.java  # createdAt / updatedAt 감사
-    ├── config                      # SecurityConfig, JpaConfig
+    ├── config                      # SecurityConfig, JpaConfig, SwaggerConfig
     └── security                    # 인증 인프라 (도메인 코드는 domain/auth에 있다)
         ├── filter/JwtAuthenticationFilter.java
         ├── token/TokenStore.java           # Redis — rt:{userId}, bl:{jti}
@@ -157,6 +157,7 @@ UserService.withdraw
 - 필요한 `.env` 키: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `JWT_SECRET` (`.env.example` 참고). Redis 접속 정보는 `.env`가 아니라 프로파일 파일에 둔다.
 - **MySQL과 Redis가 모두 떠 있어야 한다.** Redis가 없으면 부팅은 되지만 로그인 성공 처리와 인증 요청이 깨진다 (`CLAUDE.md` 실행 전제).
 - JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`, `format_sql: true`.
+- Swagger(OpenAPI): `SwaggerConfig`가 제목(`SUDAM API 명세`)과 JWT 보안 스키마(`bearerAuth`)만 정의한다. UI는 `/swagger-ui.html`, 문서는 `/v3/api-docs`이며 두 경로 모두 `SecurityConfig.allowUris`로 공개돼 있다. Authorize 창에는 `Bearer ` 없이 액세스 토큰만 넣는다.
 
 ## 아직 정해지지 않은 것
 
@@ -164,4 +165,4 @@ UserService.withdraw
 - **탈퇴 보강** — 카카오 연결 끊기(unlink, ERD 1.2.3), 재가입 제한 정책, 연락처가 담긴 타 도메인 데이터 정리가 빠져 있다.
 - **운영 프로파일** — `application-prod.yaml`, `ddl-auto` 운영 전략, 마이그레이션 도구(Flyway 등) 미도입. 배포 시 `CookieUtil`의 `secure(true)` / `SameSite=None` 전환도 함께 필요하다.
 - **CORS** — `SecurityConfig`에 설정이 없다. 프론트 연동 시 추가 필요.
-- **API 문서 자동화** — Swagger/OpenAPI 미도입. 현재는 `docs/api-spec.md` 수동 관리.
+- **API 명세 문서의 역할 분담** — Swagger는 `@Tag`·`@Operation` 수준의 요약만 담는다. 에러 코드별 응답 예시는 여전히 `docs/api-spec.md` 수동 관리다.
