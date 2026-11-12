@@ -6,6 +6,7 @@ import com.sudam.global.security.filter.JwtAuthenticationFilter;
 import com.sudam.global.security.oauth2.CustomOAuth2UserService;
 import com.sudam.global.security.oauth2.handler.OAuth2LoginFailureHandler;
 import com.sudam.global.security.oauth2.handler.OAuth2LoginSuccessHandler;
+import com.sudam.global.security.token.TokenStore;
 import com.sudam.global.security.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -28,10 +29,12 @@ public class SecurityConfig {
     private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
     private final JwtUtil jwtUtil;
+    private final TokenStore tokenStore;
 
     private final String[] allowUris = {
         "/oauth2/**", // 소셜 로그인 페이지
-        "/login/**" // 리다이렉트 uri
+        "/login/**", // 리다이렉트 uri
+        "/api/v1/auth/reissue" // 토큰 재발급 uri
     };
 
     @Bean
@@ -54,7 +57,7 @@ public class SecurityConfig {
                         .successHandler(oAuth2LoginSuccessHandler)
                         .failureHandler(oAuth2LoginFailureHandler))
 
-                .addFilterBefore(new JwtAuthenticationFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new JwtAuthenticationFilter(jwtUtil, tokenStore), UsernamePasswordAuthenticationFilter.class)
 
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(customAuthenticationEntryPoint)

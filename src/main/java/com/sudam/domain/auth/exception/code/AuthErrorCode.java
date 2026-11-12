@@ -13,6 +13,7 @@ public enum AuthErrorCode implements BaseErrorCode {
     REQUIRED_CONSENT_MISSING(HttpStatus.UNAUTHORIZED, "AUTH401_1", "필수 동의 항목에 동의해야 로그인할 수 있습니다."),
     SOCIAL_LOGIN_FAILED(HttpStatus.UNAUTHORIZED, "AUTH401_2", "소셜 로그인에 실패했습니다."),
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH401_3", "유효하지 않은 토큰입니다."),
+    BLACKLISTED_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH401_4", "로그아웃된 토큰입니다. 다시 로그인해 주세요."),
     ;
 
     private final HttpStatus status;
