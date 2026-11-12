@@ -6,6 +6,10 @@ import com.sudam.domain.auth.dto.response.TokenReissueResponse;
 import com.sudam.domain.auth.service.AuthService;
 import com.sudam.global.ApiResponse;
 import com.sudam.global.security.util.CookieUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "인증", description = "토큰 재발급·로그아웃 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth")
@@ -30,6 +35,9 @@ public class AuthController {
      * @param response 새 쿠키를 실을 응답
      * @return 새 액세스 토큰
      */
+    @Operation(summary = "토큰 재발급",
+            description = "리프레시 토큰 쿠키로 액세스·리프레시 토큰을 재발급한다. 새 리프레시 토큰은 HttpOnly 쿠키로 내려간다.")
+    @SecurityRequirements // 액세스 토큰이 만료된 상태로 호출하는 경로라 인증을 요구하지 않는다
     @PostMapping("/reissue")
     public ApiResponse<TokenReissueResponse> reissue(
             @CookieValue(name = CookieUtil.REFRESH_TOKEN_COOKIE, required = false) String refreshToken,
@@ -47,8 +55,10 @@ public class AuthController {
      * @param bearer Authorization 헤더. 인증이 필요한 경로라 값이 보장된다
      * @param response 리프레시 토큰 쿠키를 지울 응답
      */
+    @Operation(summary = "로그아웃",
+            description = "리프레시 토큰을 폐기하고 요청에 쓰인 액세스 토큰을 차단 목록에 올린다.")
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
+    public ApiResponse<Void> logout(@Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
                                     HttpServletResponse response) {
 
         authService.logout(bearer);

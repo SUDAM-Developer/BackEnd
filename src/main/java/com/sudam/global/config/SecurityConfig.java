@@ -34,7 +34,10 @@ public class SecurityConfig {
     private final String[] allowUris = {
         "/oauth2/**", // 소셜 로그인 페이지
         "/login/**", // 리다이렉트 uri
-        "/api/v1/auth/reissue" // 토큰 재발급 uri
+        "/api/v1/auth/reissue", // 토큰 재발급 uri
+        "/swagger-ui/**", // Swagger UI 정적 리소스
+        "/swagger-ui.html", // Swagger UI 진입 경로
+        "/v3/api-docs/**" // OpenAPI 문서(JSON)
     };
 
     @Bean

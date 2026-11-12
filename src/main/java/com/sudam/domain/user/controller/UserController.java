@@ -6,6 +6,9 @@ import com.sudam.domain.user.service.UserService;
 import com.sudam.global.ApiResponse;
 import com.sudam.global.security.oauth2.CustomOAuth2User;
 import com.sudam.global.security.util.CookieUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "회원", description = "회원 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/users")
@@ -31,9 +35,11 @@ public class UserController {
      * @param bearer Authorization 헤더. 인증이 필요한 경로라 값이 보장된다
      * @param response 리프레시 토큰 쿠키를 지울 응답
      */
+    @Operation(summary = "회원 탈퇴",
+            description = "본인 계정을 논리 삭제하고 개인정보를 파기한 뒤 로그아웃과 같은 토큰 정리를 수행한다.")
     @DeleteMapping("/me")
     public ApiResponse<Void> withdraw(@AuthenticationPrincipal CustomOAuth2User principal,
-                                      @RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
+                                      @Parameter(hidden = true) @RequestHeader(HttpHeaders.AUTHORIZATION) String bearer,
                                       HttpServletResponse response) {
 
         userService.withdraw(principal.getUserId());
