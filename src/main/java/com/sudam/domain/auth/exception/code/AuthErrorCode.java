@@ -1,6 +1,6 @@
-package com.sudam.global.security.exception;
+package com.sudam.domain.auth.exception.code;
 
-import com.sudam.global.code.BaseErrorCode;
+import com.sudam.global.exception.code.BaseErrorCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;

@@ -1,6 +1,6 @@
 package com.sudam.global.security.filter;
 
-import com.sudam.global.security.exception.AuthException;
+import com.sudam.domain.auth.exception.AuthException;
 import com.sudam.global.security.oauth2.CustomOAuth2User;
 import com.sudam.global.security.util.JwtUtil;
 import io.jsonwebtoken.Claims;

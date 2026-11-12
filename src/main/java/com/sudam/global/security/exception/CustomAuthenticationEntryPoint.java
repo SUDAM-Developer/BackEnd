@@ -1,7 +1,7 @@
 package com.sudam.global.security.exception;
 
-import com.sudam.global.code.BaseErrorCode;
-import com.sudam.global.code.GeneralErrorCode;
+import com.sudam.global.exception.code.BaseErrorCode;
+import com.sudam.global.exception.code.GeneralErrorCode;
 import com.sudam.global.exception.ProjectException;
 import com.sudam.global.security.filter.JwtAuthenticationFilter;
 import jakarta.servlet.http.HttpServletRequest;

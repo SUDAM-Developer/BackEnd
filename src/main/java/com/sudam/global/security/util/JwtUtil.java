@@ -1,8 +1,8 @@
 package com.sudam.global.security.util;
 
 import com.sudam.domain.user.enums.Role;
-import com.sudam.global.security.exception.AuthErrorCode;
-import com.sudam.global.security.exception.AuthException;
+import com.sudam.domain.auth.exception.code.AuthErrorCode;
+import com.sudam.domain.auth.exception.AuthException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;

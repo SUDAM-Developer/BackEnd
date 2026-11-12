@@ -3,8 +3,8 @@ package com.sudam.global;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.sudam.global.code.BaseErrorCode;
-import com.sudam.global.code.BaseSuccessCode;
+import com.sudam.global.exception.code.BaseErrorCode;
+import com.sudam.global.exception.code.BaseSuccessCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 

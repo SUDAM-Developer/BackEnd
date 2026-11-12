@@ -1,8 +1,8 @@
 package com.sudam.global.handler;
 
 import com.sudam.global.ApiResponse;
-import com.sudam.global.code.BaseErrorCode;
-import com.sudam.global.code.GeneralErrorCode;
+import com.sudam.global.exception.code.BaseErrorCode;
+import com.sudam.global.exception.code.GeneralErrorCode;
 import com.sudam.global.exception.ProjectException;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;

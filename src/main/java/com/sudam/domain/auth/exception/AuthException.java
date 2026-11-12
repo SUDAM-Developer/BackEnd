@@ -1,6 +1,6 @@
-package com.sudam.global.security.exception;
+package com.sudam.domain.auth.exception;
 
-import com.sudam.global.code.BaseErrorCode;
+import com.sudam.global.exception.code.BaseErrorCode;
 import com.sudam.global.exception.ProjectException;
 
 public class AuthException extends ProjectException {
