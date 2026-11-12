@@ -60,7 +60,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 oAuth2Response.getProvider(), oAuth2Response.getProviderId(),
                 oAuth2Response.getName(), oAuth2Response.getEmail());
 
-
         Provider provider = Provider.valueOf(oAuth2Response.getProvider().toUpperCase(Locale.ROOT));
         // 회원을 조회하고, 없으면 선생님으로 가입시킨다.
         User user = userService.findOrCreate(provider, oAuth2Response.getProviderId(), oAuth2Response.getEmail());
