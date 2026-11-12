@@ -11,7 +11,7 @@ import java.time.Duration;
 @Component
 public class CookieUtil {
 
-    private static final String REFRESH_TOKEN_COOKIE = "refreshToken";
+    public static final String REFRESH_TOKEN_COOKIE = "refreshToken";
 
     private final long refreshTokenExpiration;
 
@@ -27,11 +27,24 @@ public class CookieUtil {
      * @param refreshToken 발급된 리프레시 토큰
      */
     public void addRefreshTokenCookie(HttpServletResponse response, String refreshToken) {
+        addCookie(response, refreshToken, Duration.ofMillis(refreshTokenExpiration));
+    }
 
-        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
+    /***
+     * 함수 기능: 리프레시 토큰 쿠키를 즉시 만료시킨다. 로그아웃·탈퇴 후 브라우저에 쿠키가 남지 않게 한다.
+     *          속성(path·sameSite 등)이 발급 시점과 같아야 브라우저가 같은 쿠키로 인식해 덮어쓴다.
+     * @param response 쿠키를 실을 응답
+     */
+    public void deleteRefreshTokenCookie(HttpServletResponse response) {
+        addCookie(response, "", Duration.ZERO);
+    }
+
+    private void addCookie(HttpServletResponse response, String value, Duration maxAge) {
+
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, value)
                 .httpOnly(true)
                 .path("/")
-                .maxAge(Duration.ofMillis(refreshTokenExpiration))
+                .maxAge(maxAge)
                 .sameSite("Lax")
                 .build();
 

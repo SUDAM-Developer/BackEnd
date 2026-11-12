@@ -11,7 +11,7 @@ paths:
 ```
 com.sudam
 ├── domain
-│   └── <도메인>            # user, post, ...
+│   └── <도메인>            # auth, user, post, ...
 │       ├── controller
 │       ├── service
 │       ├── repository
@@ -20,15 +20,22 @@ com.sudam
 │       │   ├── request
 │       │   └── response
 │       ├── enums
-│       └── exception       # 도메인 전용 에러 코드 / 예외
+│       └── exception       # <도메인>Exception
+│           └── code        # <도메인>ErrorCode / <도메인>SuccessCode
 └── global
-    ├── code                # BaseSuccessCode / BaseErrorCode / General*
     ├── exception           # ProjectException 등 공통 예외
+    │   └── code            # BaseErrorCode / BaseSuccessCode / General*
     ├── handler             # @RestControllerAdvice
     ├── entity              # BaseTimeEntity 등 공통 매핑
-    ├── security            # oauth2, filter, util, 인증 예외
+    ├── security            # oauth2, filter, util, token — 인증 인프라
     └── config              # SecurityConfig, JpaConfig 등 설정 클래스
 ```
+
+- **성공/에러 코드 enum은 항상 `<스코프>/exception/code/` 아래에 둔다.** 예외 클래스는 그 한 단계 위인 `exception/`에 둔다.
+  - `global/exception/code/` — `BaseErrorCode`, `BaseSuccessCode`, `GeneralErrorCode`, `GeneralSuccessCode`
+  - `domain/<도메인>/exception/code/` — `<도메인>ErrorCode`, `<도메인>SuccessCode`
+  - `domain/<도메인>/exception/` — `<도메인>Exception`
+- 코드 enum은 도메인 자산이다. 인증 코드(`AuthErrorCode`·`AuthSuccessCode`)도 `global/security`가 아니라 `domain/auth/exception/code/`에 있다. `global/security`에는 필터·핸들러·유틸·토큰 저장소만 남긴다.
 
 - 새 기능은 먼저 **어느 도메인인지** 정하고 `domain.<도메인>` 아래에 레이어별로 배치한다. 공통으로 두 도메인 이상이 쓰는 것만 `global`로 올린다.
 - 레이어를 건너뛰지 않는다: `controller → service → repository`. 컨트롤러에서 레포지토리를 직접 호출하지 않는다.

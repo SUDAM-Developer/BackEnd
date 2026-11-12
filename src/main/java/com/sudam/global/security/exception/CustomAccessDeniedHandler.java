@@ -1,6 +1,6 @@
 package com.sudam.global.security.exception;
 
-import com.sudam.global.code.GeneralErrorCode;
+import com.sudam.global.exception.code.GeneralErrorCode;
 import com.sudam.global.exception.ProjectException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

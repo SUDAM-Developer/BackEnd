@@ -1,8 +1,8 @@
 package com.sudam.global.security.oauth2.handler;
 
-import com.sudam.global.code.BaseErrorCode;
-import com.sudam.global.security.exception.AuthErrorCode;
-import com.sudam.global.security.exception.SocialLoginException;
+import com.sudam.global.exception.code.BaseErrorCode;
+import com.sudam.domain.auth.exception.code.AuthErrorCode;
+import com.sudam.global.security.oauth2.exception.SocialLoginException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;

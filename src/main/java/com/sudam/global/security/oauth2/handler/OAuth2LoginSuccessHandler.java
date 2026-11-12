@@ -1,6 +1,7 @@
 package com.sudam.global.security.oauth2.handler;
 
 import com.sudam.global.security.oauth2.CustomOAuth2User;
+import com.sudam.global.security.token.TokenStore;
 import com.sudam.global.security.util.CookieUtil;
 import com.sudam.global.security.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,13 +21,16 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtUtil jwtUtil;
     private final CookieUtil cookieUtil;
+    private final TokenStore tokenStore;
     private final String successRedirectUri;
 
     public OAuth2LoginSuccessHandler(JwtUtil jwtUtil,
                                      CookieUtil cookieUtil,
+                                     TokenStore tokenStore,
                                      @Value("${app.oauth2.success-redirect-uri}") String successRedirectUri) {
         this.jwtUtil = jwtUtil;
         this.cookieUtil = cookieUtil;
+        this.tokenStore = tokenStore;
         this.successRedirectUri = successRedirectUri;
     }
 
@@ -44,7 +48,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         String provider = ((OAuth2AuthenticationToken) authentication).getAuthorizedClientRegistrationId();
 
         String accessToken = jwtUtil.createAccessToken(principal.getUserId(), principal.getRole());
-        cookieUtil.addRefreshTokenCookie(response, jwtUtil.createRefreshToken(principal.getUserId()));
+
+        // 서버가 발급한 RT는 Redis에 저장하고 쿠키에 담아 응답한다.
+        String refreshToken = jwtUtil.createRefreshToken(principal.getUserId(), principal.getRole());
+        tokenStore.saveRefreshToken(principal.getUserId(), refreshToken);
+        cookieUtil.addRefreshTokenCookie(response, refreshToken);
 
         log.info("[소셜 로그인 성공] provider={}, userId={}, role={}",
                 provider, principal.getUserId(), principal.getRole());

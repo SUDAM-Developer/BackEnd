@@ -1,7 +1,6 @@
 ---
 description: 성공/에러 코드와 예외 설계 — 코드 문자열 규칙, BaseErrorCode 구현, 예외 핸들러 확장
 paths:
-  - "src/main/java/com/sudam/global/code/**"
   - "src/main/java/com/sudam/global/exception/**"
   - "src/main/java/com/sudam/global/handler/**"
   - "src/main/java/com/sudam/**/exception/**"
@@ -11,17 +10,61 @@ paths:
 
 ## 구조
 
-- `BaseSuccessCode` / `BaseErrorCode` 인터페이스: `getStatus()`, `getCode()`, `getMessage()`.
-- 공통 코드: `GeneralSuccessCode`(`COMMON200`, `COMMON201`), `GeneralErrorCode`(`COMMON400`~`COMMON503`).
-- 도메인/관심사별 코드는 별도 enum이 `BaseErrorCode`를 구현한다 (예: `global.security.exception.AuthErrorCode`).
-- 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`)**을 상속받는 각 도메인 예외로 변환해서** 던진다. 인증 흐름 예외는 `AuthException`(`OAuth2AuthenticationException` 상속).
+**코드 enum은 항상 `<스코프>/exception/code/`, 예외 클래스는 그 한 단계 위 `<스코프>/exception/`에 둔다.**
+
+```
+global/exception/
+├── ProjectException.java
+└── code/
+    ├── BaseErrorCode.java      # getStatus() / getCode() / getMessage()
+    ├── BaseSuccessCode.java    # 동일 시그니처
+    ├── GeneralErrorCode.java   # COMMON400 ~ COMMON503
+    └── GeneralSuccessCode.java # COMMON200, COMMON201
+
+domain/<도메인>/exception/
+├── <도메인>Exception.java       # extends ProjectException
+└── code/
+    ├── <도메인>ErrorCode.java    # implements BaseErrorCode
+    └── <도메인>SuccessCode.java  # implements BaseSuccessCode
+```
+
+- 도메인/관심사별 코드는 별도 enum이 `BaseErrorCode` / `BaseSuccessCode`를 구현한다 (예: `domain.auth.exception.code.AuthErrorCode`).
+- **코드 enum은 도메인 자산이다.** 인증 코드도 `global/security`가 아니라 `domain/auth/exception/code/`에 둔다. `global/security`에는 필터·핸들러·유틸·토큰 저장소만 남긴다.
+- 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`)**을 상속받는 각 도메인 예외로 변환해서** 던진다. 소셜 로그인 흐름만 `SocialLoginException`(`OAuth2AuthenticationException` 상속, `global/security/oauth2/exception/`)을 쓴다.
+
+## 성공 코드 — 도메인별 enum을 쓴다
+
+컨트롤러는 `GeneralSuccessCode`가 아니라 **해당 도메인의 `<도메인>SuccessCode`**로 응답한다. 어느 도메인의 응답인지 코드 문자열에서 바로 드러나고, 메시지를 행위에 맞게 쓸 수 있다.
+
+```java
+// domain/auth/exception/code/AuthSuccessCode.java
+@Getter
+@RequiredArgsConstructor
+public enum AuthSuccessCode implements BaseSuccessCode {
+
+    TOKEN_REISSUED(HttpStatus.OK, "AUTH200_1", "토큰을 재발급했습니다."),
+    ;
+
+    private final HttpStatus status;
+    private final String code;
+    private final String message;
+}
+```
+
+```java
+return ApiResponse.onSuccess(AuthSuccessCode.TOKEN_REISSUED, result);
+```
+
+- 코드 문자열 규칙은 에러 코드와 같다: `<접두사><HTTP 상태>_<순번>` (`AUTH200_1`, `USER200_1`).
+- 메시지는 `"성공적으로 요청을 처리했습니다."` 같은 범용 문구가 아니라 수행한 행위를 적는다 (`"회원 탈퇴가 완료되었습니다."`).
+- `GeneralSuccessCode`는 도메인에 속하지 않는 범용 응답의 제자리로 남겨 둔다.
 
 ## 도메인 예외 — `ProjectException`을 상속한다
 
 일반 비즈니스 예외는 `ProjectException`을 직접 던지지 않고, **도메인별 예외 클래스로 변환해서** 던진다. Member 도메인에서 터진 예외는 `MemberException extends ProjectException`으로 잡히게 하는 식이다.
 
 ```java
-// com.sudam.domain.member.exception.MemberException
+// domain/member/exception/MemberException.java
 public class MemberException extends ProjectException {
 
     public MemberException(BaseErrorCode errorCode) {
@@ -35,7 +78,7 @@ public class MemberException extends ProjectException {
 throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
 ```
 
-- 위치/이름: `domain.<도메인>.exception.<도메인>Exception`. 해당 도메인의 `<도메인>ErrorCode`와 같은 패키지에 둔다.
+- 위치/이름: `domain.<도메인>.exception.<도메인>Exception`. 코드 enum은 그 아래 `code` 패키지(`domain.<도메인>.exception.code.<도메인>ErrorCode`)에 둔다.
 - 생성자는 `BaseErrorCode` 하나만 받아 `super(errorCode)`로 넘긴다. 상태/코드/메시지는 전부 에러 코드 enum이 들고 있으므로 예외 클래스에 필드를 추가하지 않는다.
 - 도메인 예외는 자기 도메인의 에러 코드와 짝지어 던지는 것이 기본이다. `MemberException`에 `PostErrorCode`를 넣지 않는다.
 - `global` 공통 로직처럼 특정 도메인에 속하지 않는 예외만 `ProjectException`을 그대로 던진다.
@@ -53,9 +96,10 @@ throw new MemberException(MemberErrorCode.MEMBER_NOT_FOUND);
 
 ## 새 에러 코드를 추가할 때
 
-1. 해당 도메인의 `exception` 패키지에 `XxxErrorCode` enum이 있는지 확인하고, 없으면 만든다.
+1. 해당 도메인의 `exception/code` 패키지에 `XxxErrorCode` enum이 있는지 확인하고, 없으면 만든다.
 
 ```java
+// domain/member/exception/code/MemberErrorCode.java
 @Getter
 @RequiredArgsConstructor
 public enum MemberErrorCode implements BaseErrorCode {

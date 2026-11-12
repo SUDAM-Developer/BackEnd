@@ -1,8 +1,8 @@
-package com.sudam.global.code;
+package com.sudam.global.exception.code;
 
 import org.springframework.http.HttpStatus;
 
-public interface BaseErrorCode {
+public interface BaseSuccessCode {
 
     HttpStatus getStatus();
     String getCode();

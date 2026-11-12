@@ -1,6 +1,6 @@
 package com.sudam.global.exception;
 
-import com.sudam.global.code.BaseErrorCode;
+import com.sudam.global.exception.code.BaseErrorCode;
 import lombok.Getter;
 
 @Getter

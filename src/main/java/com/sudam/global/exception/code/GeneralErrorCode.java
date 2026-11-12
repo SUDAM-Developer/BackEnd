@@ -1,4 +1,4 @@
-package com.sudam.global.code;
+package com.sudam.global.exception.code;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

@@ -3,8 +3,8 @@ package com.sudam.global.security.oauth2;
 import com.sudam.domain.user.entity.User;
 import com.sudam.domain.user.enums.Provider;
 import com.sudam.domain.user.service.UserService;
-import com.sudam.global.security.exception.AuthErrorCode;
-import com.sudam.global.security.exception.SocialLoginException;
+import com.sudam.domain.auth.exception.code.AuthErrorCode;
+import com.sudam.global.security.oauth2.exception.SocialLoginException;
 import com.sudam.global.security.oauth2.response.KakaoResponse;
 import com.sudam.global.security.oauth2.response.OAuth2Response;
 import lombok.RequiredArgsConstructor;
@@ -61,7 +61,6 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         log.info("[소셜 회원 정보] provider={}, providerId={}, nickname={}, email={}",
                 oAuth2Response.getProvider(), oAuth2Response.getProviderId(),
                 oAuth2Response.getName(), oAuth2Response.getEmail());
-
 
         Provider provider = Provider.valueOf(oAuth2Response.getProvider().toUpperCase(Locale.ROOT));
         // 회원을 조회하고, 없으면 선생님으로 가입시킨다.

@@ -10,6 +10,7 @@ paths:
 ## 먼저 알아야 할 전제
 
 - 이 프로젝트에는 H2 폴백도 Testcontainers도 없다. `@SpringBootTest`는 `.env`의 **실제 MySQL에 연결된다.** `ddl-auto: create`이므로 테스트를 돌리면 그 DB 스키마가 drop/recreate된다.
+- **Redis도 떠 있어야 한다.** 컨텍스트를 띄우는 테스트는 `StringRedisTemplate` 빈을 만든다(연결은 지연되지만, 토큰 저장소를 실제로 쓰는 테스트는 Redis 없이는 실패한다). 실행 방법은 `CLAUDE.md`의 실행 전제 절.
 - `SudamApplicationTests`(`contextLoads`)는 전체 컨텍스트 로드 테스트다. DB가 없으면 이 테스트부터 실패하는데, 코드 문제가 아니라 환경 문제다.
 - 그래서 **기본 선택은 컨텍스트를 띄우지 않는 단위 테스트**다. 컨텍스트가 필요하면 전체(`@SpringBootTest`)보다 슬라이스를 쓴다.
 
