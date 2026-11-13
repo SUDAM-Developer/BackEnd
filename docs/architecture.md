@@ -1,6 +1,6 @@
 # 아키텍처
 
-> 최종 수정: 2026-11-05
+> 최종 수정: 2026-11-13
 > 전체 구조와 요청 처리 흐름. 세부 규칙은 `.claude/rules/`의 각 파일에 있다.
 
 ## 기술 스택
@@ -34,6 +34,15 @@ com.sudam
 │   │       └── code
 │   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
 │   │           └── AuthSuccessCode.java  # AUTH200_1
+│   ├── participant                 # 참여자 도메인 (과외에 속한 학부모 · 학생, 링크 토큰)
+│   │   ├── entity/Participant.java
+│   │   ├── enums                   # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
+│   │   └── repository/ParticipantRepository.java
+│   ├── tutoring                    # 과외 도메인
+│   │   ├── entity                  # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
+│   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책을 고르는 순수 함수
+│   │   ├── enums                   # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
+│   │   └── repository              # 엔티티별 JpaRepository (정책은 과외별 목록 조회만)
 │   └── user
 │       ├── entity/User.java
 │       ├── enums                   # Role(TEACHER, PARENT, STUDENT), Provider(KAKAO)
@@ -51,6 +60,7 @@ com.sudam
     ├── handler
     │   └── GeneralExceptionHandler.java  # @RestControllerAdvice
     ├── entity/BaseTimeEntity.java  # createdAt / updatedAt 감사
+    ├── crypto/AccountNumberConverter.java  # 계좌번호 AES-256-GCM JPA 변환기 (키: ACCOUNT_ENCRYPTION_KEY)
     ├── config                      # SecurityConfig, JpaConfig, SwaggerConfig
     └── security                    # 인증 인프라 (도메인 코드는 domain/auth에 있다)
         ├── filter/JwtAuthenticationFilter.java
@@ -154,7 +164,7 @@ UserService.withdraw
 
 - `application.yaml` — 공통 설정. `optional:file:.env[.properties]`를 import해 비밀값을 환경 변수로 받는다.
 - `application-local.yaml` — 로컬 전용 (카카오 redirect-uri, 프론트 리다이렉트 URI, Redis 호스트·포트). 기본 활성 프로파일은 `local`.
-- 필요한 `.env` 키: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `JWT_SECRET` (`.env.example` 참고). Redis 접속 정보는 `.env`가 아니라 프로파일 파일에 둔다.
+- 필요한 `.env` 키: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `JWT_SECRET`, `ACCOUNT_ENCRYPTION_KEY` (`.env.example` 참고). `ACCOUNT_ENCRYPTION_KEY`는 Base64로 인코딩한 32바이트(`openssl rand -base64 32`)이고, 없거나 길이가 틀리면 기동 시점에 실패한다. 키를 바꾸면 기존 계좌번호를 복호화할 수 없다. Redis 접속 정보는 `.env`가 아니라 프로파일 파일에 둔다.
 - **MySQL과 Redis가 모두 떠 있어야 한다.** Redis가 없으면 부팅은 되지만 로그인 성공 처리와 인증 요청이 깨진다 (`CLAUDE.md` 실행 전제).
 - JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`, `format_sql: true`.
 - Swagger(OpenAPI): `SwaggerConfig`가 제목(`SUDAM API 명세`)과 JWT 보안 스키마(`bearerAuth`)만 정의한다. UI는 `/swagger-ui.html`, 문서는 `/v3/api-docs`이며 두 경로 모두 `SecurityConfig.allowUris`로 공개돼 있다. Authorize 창에는 `Bearer ` 없이 액세스 토큰만 넣는다.
