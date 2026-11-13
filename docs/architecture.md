@@ -1,6 +1,6 @@
 # 아키텍처
 
-> 최종 수정: 2026-11-05
+> 최종 수정: 2026-11-13
 > 전체 구조와 요청 처리 흐름. 세부 규칙은 `.claude/rules/`의 각 파일에 있다.
 
 ## 기술 스택
@@ -34,11 +34,22 @@ com.sudam
 │   │       └── code
 │   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
 │   │           └── AuthSuccessCode.java  # AUTH200_1
-│   └── user
-│       ├── entity/User.java
-│       ├── enums                   # Role(TEACHER, PARENT, STUDENT), Provider(KAKAO)
-│       ├── repository/UserRepository.java
-│       └── service/UserService.java
+│   └── user                        # 회원 · 온보딩(약관 동의 → 프로필) · 설정
+│       ├── controller/UserController.java
+│       ├── service/UserService.java
+│       ├── repository              # User, Terms, UserTermsAgreement, TeacherProfile
+│       ├── entity
+│       │   ├── User.java
+│       │   ├── Terms.java                # 약관 버전 행. 코드에서 생성하지 않고 data.sql 시드
+│       │   ├── UserTermsAgreement.java   # 회원 × 약관 버전 동의 (UNIQUE)
+│       │   └── TeacherProfile.java       # PK = users.id, subjects는 JSON 컬럼
+│       ├── enums                   # Role, Provider, Subject(과목 + 한글명), TermsCode, UserStatus
+│       ├── dto
+│       │   ├── request             # AgreeTermsRequest, SaveProfileRequest(등록 · 수정 공용)
+│       │   └── response            # MeResponse, TermsAgreementResponse, Profile*Response, SettingsResponse
+│       └── exception
+│           ├── UserException.java
+│           └── code                # UserErrorCode(USER400_1 ~ USER409_1), UserSuccessCode(USER200_1 ~ USER201_2)
 └── global                          # 도메인 공통 관심사
     ├── ApiResponse.java            # 모든 응답의 공통 래퍼
     ├── exception
@@ -150,6 +161,27 @@ UserService.withdraw
 
 세션이 STATELESS라 발급된 AT는 서버가 따로 막지 않으면 만료까지 유효하다. 그래서 차단 목록이 필요하다.
 
+### 온보딩 (약관 동의 → 프로필)
+
+```
+GET  /api/v1/users/me                    status 계산 (저장하지 않음)
+  → 현재 시행 중인 약관 = terms(effective_at <= now)를 code별 최신 version으로 축약
+  → 필수 약관 수 > 동의 행 수      → TERMS_REQUIRED
+  → teacher_profiles 행 없음        → PROFILE_REQUIRED
+  → 그 외                           → ACTIVE
+
+POST /api/v1/users/me/terms-agreements   필수 약관이 빠지면 저장 전에 USER400_1
+  → 코드마다 현재 버전 Terms에 대해 기존 동의 행이 있으면 재사용, 없으면 저장 (멱등)
+
+POST /api/v1/users/me/profile            existsById → USER409_1
+PUT  /api/v1/users/me/profile            findById   → USER404_2, 전체 교체 후 flush로 updated_at 확정
+  → subjects에 OTHER가 없으면 subjectOther는 null로 정규화, 있는데 공백이면 USER400_2
+
+GET  /api/v1/users/me/settings           profile · provider만 DB 값, 나머지는 고정 기본값
+```
+
+과목은 테이블 없이 `Subject` enum이고, `teacher_profiles.subjects`는 enum 이름 배열을 담는 JSON 컬럼이다 (`docs/erd.md`).
+
 ## 설정 / 프로파일
 
 - `application.yaml` — 공통 설정. `optional:file:.env[.properties]`를 import해 비밀값을 환경 변수로 받는다.
@@ -157,6 +189,7 @@ UserService.withdraw
 - 필요한 `.env` 키: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `JWT_SECRET` (`.env.example` 참고). Redis 접속 정보는 `.env`가 아니라 프로파일 파일에 둔다.
 - **MySQL과 Redis가 모두 떠 있어야 한다.** Redis가 없으면 부팅은 되지만 로그인 성공 처리와 인증 요청이 깨진다 (`CLAUDE.md` 실행 전제).
 - JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`, `format_sql: true`.
+- 시드: `spring.sql.init.mode: always` + `defer-datasource-initialization: true`라서 스키마 생성 뒤 `src/main/resources/data.sql`이 매번 실행된다. 현재는 약관 3행(`terms`)만 넣는다. 약관 행은 코드로 만들지 않으므로 새 버전은 이 파일에 추가한다.
 - Swagger(OpenAPI): `SwaggerConfig`가 제목(`SUDAM API 명세`)과 JWT 보안 스키마(`bearerAuth`)만 정의한다. UI는 `/swagger-ui.html`, 문서는 `/v3/api-docs`이며 두 경로 모두 `SecurityConfig.allowUris`로 공개돼 있다. Authorize 창에는 `Bearer ` 없이 액세스 토큰만 넣는다.
 
 ## 아직 정해지지 않은 것

@@ -1,10 +1,10 @@
 # ERD
 
-> 최종 수정: 2026-11-06
+> 최종 수정: 2026-11-13
 > 작성 규칙은 `.claude/rules/jpa-convention.md`를 따른다.
 
 - 기준: SUDAM 기능명세서 11-01 ver, 결제 방식 10/31 최종 정리. 괄호 속 숫자(예: 2.2.4)는 기능명세서 번호
-- 규모: 9개 도메인, 42개 테이블 (UT 전 24 · UT 이후 17 · P2 1)
+- 규모: 9개 도메인, 40개 테이블 (UT 전 22 · UT 이후 17 · P2 1)
 
 ## 공통 규칙
 
@@ -24,7 +24,7 @@
 
 | 도메인 | 테이블 | 개발 시점 |
 | --- | --- | --- |
-| 계정 | users, terms, user_terms_agreements, teacher_profiles, subjects, teacher_subjects | UT 전 |
+| 계정 | users, terms, user_terms_agreements, teacher_profiles | UT 전 |
 | 첫 과외 준비 | teacher_intros, teacher_intro_sections, consult_students, curricula, curriculum_stages, curriculum_textbooks | UT 이후 |
 | 과외 | tutorings, tutoring_schedules, textbooks, tutoring_policies, tutoring_settings | UT 전 |
 | 참여자 | participants | UT 전 |
@@ -45,12 +45,9 @@ erDiagram
     users ||--o{ user_terms_agreements : "user_id"
     terms ||--o{ user_terms_agreements : "terms_id"
     users ||--o| teacher_profiles : "user_id"
-    teacher_profiles ||--o{ teacher_subjects : "teacher_id"
-    subjects ||--o{ teacher_subjects : "subject_id"
     teacher_profiles ||--o| teacher_intros : "teacher_id"
     teacher_intros ||--o{ teacher_intro_sections : "intro_id"
     teacher_profiles ||--o{ consult_students : "teacher_id"
-    subjects ||--o{ consult_students : "subject_id"
     tutorings ||--o| consult_students : "tutoring_id"
     teacher_profiles ||--o{ curricula : "teacher_id"
     consult_students ||--o| curricula : "consult_student_id"
@@ -59,7 +56,6 @@ erDiagram
     curricula ||--o{ curriculum_stages : "curriculum_id"
     curricula ||--o{ curriculum_textbooks : "curriculum_id"
     teacher_profiles ||--o{ tutorings : "teacher_id"
-    subjects ||--o{ tutorings : "subject_id"
     tutorings ||--o{ tutoring_schedules : "tutoring_id"
     tutorings ||--o{ textbooks : "tutoring_id"
     tutorings ||--o{ tutoring_policies : "tutoring_id"
@@ -145,7 +141,7 @@ erDiagram
 | 컬럼 | 타입 | 제약 | 설명 |
 | --- | --- | --- | --- |
 | `id` | BIGINT UNSIGNED | PK |  |
-| `code` | VARCHAR(50) | NOT NULL | SERVICE / PRIVACY / CONTACT_PROCESSING |
+| `code` | VARCHAR(20) | NOT NULL | SERVICE / PRIVACY / CONTACT |
 | `version` | SMALLINT UNSIGNED | NOT NULL | 1부터. 내용이 바뀌면 새 행 |
 | `title` | VARCHAR(100) | NOT NULL |  |
 | `is_required` | BOOLEAN | NOT NULL | [필수] 표시 |
@@ -170,6 +166,8 @@ erDiagram
 | --- | --- | --- | --- |
 | `user_id` | BIGINT UNSIGNED | PK, FK → users | 1:1 |
 | `name` | VARCHAR(10) | NOT NULL | 2~10자. 결제 입금자명 기본값 (11.5.1) |
+| `subjects` | JSON | NOT NULL | 담당 과목 복수 선택 (1.1.4). 과목 코드 배열 `["ENGLISH","MATH"]` |
+| `subject_other` | VARCHAR(20) | NULL | subjects에 OTHER가 있을 때 직접 입력한 과목명 |
 | `onboarding_stage` | ENUM(‘PREPARING’,‘TEACHING’) | NOT NULL | 가입 마지막 단계 선택 (1.1.5). 첫 과외 준비 / 이미 과외 중 |
 | `first_tutoring_created_at` | DATETIME | NULL | 처음 과외를 만든 시각. 탭 잠금 해제 기준 (11.1.2). 과외를 모두 종료 · 삭제해도 지우지 않음 |
 | `intro_unlocked_at` | DATETIME | NULL | 소개서 전문 열림 = 묶음 결제 승인 시각 (11.5.4) |
@@ -177,23 +175,7 @@ erDiagram
 | `created_at / updated_at` | DATETIME | NOT NULL |  |
 - 탭 잠금(11.1.2) = onboarding_stage = PREPARING AND first_tutoring_created_at IS NULL. 서버가 판단해 내려줘요.
 - 소개서 상태(1.2.5) = 전문 열림(intro_unlocked_at 있음) / 승인 대기(묶음 결제 요청 PENDING) / 진단만 봄(teacher_intros 행 있음) / 없음. 저장하지 않고 계산해요.
-
-### subjects (과목)
-
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `id` | SMALLINT UNSIGNED | PK |  |
-| `code` | VARCHAR(20) | UNIQUE | ENGLISH, MATH, KOREAN, SCIENCE, SOCIAL, OTHER |
-| `name` | VARCHAR(20) | NOT NULL | 영어, 수학, 국어, 과학, 사회, 기타 |
-- 코드 테이블. 기타 과목은 각 테이블의 subject_other에 직접 입력해요.
-
-### teacher_subjects (선생님 담당 과목)
-
-| 컬럼 | 타입 | 제약 | 설명 |
-| --- | --- | --- | --- |
-| `teacher_id` | BIGINT UNSIGNED | PK, FK → teacher_profiles |  |
-| `subject_id` | SMALLINT UNSIGNED | PK, FK → subjects |  |
-- 프로필의 과목 복수 선택 (1.1.4).
+- 과목 코드는 테이블 없이 애플리케이션 enum(ENGLISH 영어 · MATH 수학 · KOREAN 국어 · SCIENCE 과학 · SOCIAL 사회 · OTHER 기타)으로 두고, 각 테이블에 코드 문자열로 저장해요. 기타 과목은 각 테이블의 subject_other에 직접 입력해요.
 
 ## 2. 첫 과외 준비 도메인
 
@@ -259,7 +241,7 @@ erDiagram
 | `grade_level` | TINYINT UNSIGNED | NOT NULL | tutorings와 같은 규칙. 6~12 = 초6~고3, 0 = 기타 |
 | `grade_other` | VARCHAR(20) | NULL | 학년 ‘기타’ 직접 입력 |
 | `grade_school_year` | SMALLINT UNSIGNED | NOT NULL | 학년 기준 학년도 |
-| `subject_id` | SMALLINT UNSIGNED | NULL, FK → subjects |  |
+| `subject` | VARCHAR(20) | NOT NULL | 과목 코드 (ENGLISH … OTHER) |
 | `subject_other` | VARCHAR(20) | NULL | 과목 ‘기타’ (11.3.1은 20자) |
 | `current_level` | ENUM(‘TOP’,‘UPPER_MIDDLE’,‘MIDDLE’,‘LOWER’,‘OTHER’) | NOT NULL | 지금 성적 4단계 + 기타 (상위권 · 중상위권 · 중위권 · 하위권) |
 | `current_level_other` | VARCHAR(20) | NULL |  |
@@ -274,7 +256,7 @@ erDiagram
 | `tutoring_id` | BIGINT UNSIGNED | NULL, UNIQUE, FK → tutorings | 11.4.3으로 과외를 등록하면 연결 |
 | `created_at / updated_at` | DATETIME | NOT NULL |  |
 | `deleted_at` | DATETIME | NULL | 논리 삭제 |
-- 앱 검증: 필수 7개(이름 · 학년 · 과목 · 성적 · 목표 · 기간 · 횟수). 칩 그룹 6개의 [기타]는 입력칸이 채워져야 선택으로 봐요. subject_id와 subject_other 중 하나만.
+- 앱 검증: 필수 7개(이름 · 학년 · 과목 · 성적 · 목표 · 기간 · 횟수). 칩 그룹 6개의 [기타]는 입력칸이 채워져야 선택으로 봐요. subject = OTHER일 때만 subject_other 필수.
 - 카톡 캡처(11.3.1)는 글자만 읽어 consult_memo에 넣고 이미지는 저장하지 않아요.
 
 ### curricula (커리큘럼)
@@ -346,8 +328,8 @@ erDiagram
 | --- | --- | --- | --- |
 | `id` | BIGINT UNSIGNED | PK |  |
 | `teacher_id` | BIGINT UNSIGNED | FK → teacher_profiles |  |
-| `subject_id` | SMALLINT UNSIGNED | NULL, FK → subjects |  |
-| `subject_other` | VARCHAR(10) | NULL | 과목 ‘기타’ 1~10자. 이때 subject_id는 NULL |
+| `subject` | VARCHAR(20) | NOT NULL | 과목 코드 (ENGLISH … OTHER) |
+| `subject_other` | VARCHAR(10) | NULL | 과목 ‘기타’ 1~10자. subject = OTHER일 때만 |
 | `student_name` | VARCHAR(10) | NULL | 1~10자. 삭제 시 NULL |
 | `grade_level` | TINYINT UNSIGNED | NOT NULL | 1~12 = 초1~고3 (화면 선택지는 초6~고3), 0 = 기타. 현재 학년 = grade_level + (올해 학년도 − grade_school_year), 12에서 멈춤. 1~8이면 자녀 동의 필요, 0(기타)은 필요 없음 |
 | `grade_other` | VARCHAR(10) | NULL | 학년 ‘기타’ 직접 입력 (예: 재수생, 성인) |
@@ -356,7 +338,7 @@ erDiagram
 | `ended_at` | DATETIME | NULL | 수업 종료 (7.1.2) |
 | `created_at / updated_at` | DATETIME | NOT NULL |  |
 | `deleted_at` | DATETIME | NULL | 논리 삭제 |
-- 제약: INDEX(teacher_id, status). 앱 검증: subject_id와 subject_other 중 하나만, grade_level = 0이면 grade_other 필수.
+- 제약: INDEX(teacher_id, status). 앱 검증: subject = OTHER일 때만 subject_other 필수, grade_level = 0이면 grade_other 필수.
 - 구독 판단(1.2.2): ‘수업 중’ 과외 수 = status = ACTIVE이고 deleted_at IS NULL인 행 수. 1개 이상인데 구독이 ‘이용 중’ 또는 ‘입금 대기(유예)’가 아니면 새 과외를 만들 수 없어요. 구독이 만료돼도 기존 과외의 기록 · 정산 · 학부모 링크는 그대로예요.
 
 ### tutoring_schedules (수업 일정)
