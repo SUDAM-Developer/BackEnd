@@ -52,3 +52,6 @@ jwt:
   secret: ${JWT_SECRET}
   access-token-expiration: 1800000 # 30분
   refresh-token-expiration: 1209600000 # 14일
+
+crypto:
+  account-encryption-key: ${ACCOUNT_ENCRYPTION_KEY} # Base64 32바이트. 계좌번호 AES-GCM 암호화 키

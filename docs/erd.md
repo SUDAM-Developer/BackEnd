@@ -15,8 +15,10 @@
 - 삭제: 논리 삭제(withdrawn_at, deleted_at, removed_at) + 개인정보 · 식별값은 NULL로 파기
 - 계산으로 구할 수 있는 상태(읽음, 무응답, 미기록, 회차 번호, 기간, 준비 카드 단계 완료, 이용권 만료, 구독 이용 중 · 입금 대기 · 만료 · 승인 대기, 소개서 상태)는 저장하지 않음
 - 계좌번호는 애플리케이션에서 암호화해 저장 (JPA 변환기, 컬럼 길이 255). 화면에 쓰는 뒤 4자리는 따로 저장해 목록에서 복호화하지 않음
+  - 구현: `com.sudam.global.crypto.AccountNumberConverter` (AES-256-GCM, 저장값 = Base64(IV 12바이트 + 암호문 + 태그)). 키는 `.env`의 `ACCOUNT_ENCRYPTION_KEY`(Base64 32바이트). 매번 새 IV라 같은 계좌번호도 암호문이 달라요
 - 토큰(링크 · 수업 계획서 · 캘린더 구독)은 SecureRandom 32바이트를 URL 안전 문자열로 저장. 재발급은 새 값, 폐기는 NULL 또는 revoked_at
 - ‘조건에 맞는 행은 1개만’ 규칙은 생성 컬럼 + 유일 제약으로 DB에서 보장 (cycles.in_progress_key, invoices.active_cycle_key, payment_requests.pending_key, tutoring_drafts.saved_key, calendar_subscriptions.active_key)
+  - 현재 미구현: 생성 컬럼은 `ddl-auto`로 만들어지지 않아 엔티티에 두지 않았어요. 마이그레이션 도구 도입 전까지는 서비스에서 보장해요
 - 설정값(DB에 두지 않음): 결제 가격, 수담 입금 계좌, 인기 선생님 소개서 건수 · 칸별 사용 비율, 수업료 예시 단가(회당 45,000원), 구독 유예 일수(7일), 구독 안내 시점(결제일 3일 전). 결제 요청에는 그때 금액을 복사해 둠
 - 소개서는 선생님당 1개(다시 만들면 덮어씀). 인기 선생님 사례 데이터는 서비스 DB에 넣지 않음
 
@@ -340,6 +342,8 @@ erDiagram
 | `deleted_at` | DATETIME | NULL | 논리 삭제 |
 - 제약: INDEX(teacher_id, status). 앱 검증: subject = OTHER일 때만 subject_other 필수, grade_level = 0이면 grade_other 필수.
 - 구독 판단(1.2.2): ‘수업 중’ 과외 수 = status = ACTIVE이고 deleted_at IS NULL인 행 수. 1개 이상인데 구독이 ‘이용 중’ 또는 ‘입금 대기(유예)’가 아니면 새 과외를 만들 수 없어요. 구독이 만료돼도 기존 과외의 기록 · 정산 · 학부모 링크는 그대로예요.
+- 구현 메모 (팀 결정, 위 표보다 우선): `teacher_id`는 연관관계 없는 숫자 열(`Long teacherId`, 값 = `users.id`)이에요. `teacher_profiles`가 생기기 전이라 FK를 걸지 않아요. `subject_id`도 `subjects`가 생기기 전이라 연관관계 없는 숫자 열(`Short subjectId`, NULL 허용)이에요. 두 테이블이 생기면 연관관계로 바꿀지 다시 정해요.
+- 공통 구현 메모 (과외 · 참여자 도메인): UNSIGNED는 붙이지 않았어요(`users`와 같음). ENUM 컬럼은 `@Enumerated(STRING)`이라 Hibernate가 MySQL ENUM으로 만들어요.
 
 ### tutoring_schedules (수업 일정)
 
@@ -387,7 +391,8 @@ erDiagram
 | `account_holder` | VARCHAR(20) | NOT NULL | 예금주 1~20자 (기본값: 선생님 이름) |
 | `created_at` | DATETIME | NOT NULL |  |
 - 제약: INDEX(tutoring_id, effective_cycle_no, id).
-- 사이클 N의 정책 = effective_cycle_no ≤ N인 행 중 가장 최근 것 (같으면 id가 큰 행).
+- 사이클 N의 정책 = effective_cycle_no ≤ N인 행 중 가장 최근 것 (같으면 id가 큰 행). 구현: 레포지토리로 과외의 정책 목록을 읽고 순수 함수 `TutoringPolicies.applicableTo(policies, N)`으로 골라요. 해당 행이 없으면 빈 값.
+- 구현 메모: `same_day_cancel_recognized`는 컬럼만 두고 P0에서는 항상 false로 생성해요(팀 결정). `bank_code`는 은행 목록에 없는 이름이면 NULL, `bank_name`에 입력값을 그대로 둬요. 이름 → 코드 변환은 API 작업에서 해요.
 - 수정(2.5.1): P0는 수업료만, 다음 사이클부터. 다음 사이클에 적용될 예정 행이 이미 있으면 새 행을 만들지 않고 그 행을 덮어써요 (‘예정 이력 1줄’). 정산 회차 · 선불/후불 · 당일 취소 규칙 · 계좌 수정은 P1.
 - 은행 목록(2.2.4): 국민 004 · 신한 088 · 우리 020 · 하나 081 · 농협 011 · 기업 003 · SC제일 023 · 씨티 027 · 카카오뱅크 090 · 토스뱅크 092 · 케이뱅크 089 · iM뱅크(대구) 031 · 부산 032 · 경남 039 · 광주 034 · 전북 037 · 제주 035 · 수협 007 · 산업 002 · 새마을금고 045 · 신협 048 · 우체국 071 · 저축은행 050 · 산림조합 064 · 기타(NULL).
 - 계좌번호 전체는 선생님 본인과 학부모 교육비 화면([계좌 복사])에만 내려줘요. 목록 · 리포트 · 학생 상세는 뒤 4자리만. 실제 청구에 쓴 계좌는 invoices에 복사해요.
