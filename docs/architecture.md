@@ -34,6 +34,12 @@ com.sudam
 │   │       └── code
 │   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
 │   │           └── AuthSuccessCode.java  # AUTH200_1
+│   ├── invoice                     # 정산 도메인 중 교육비 청구 · 입금 · 금액 수정 이력
+│   │   ├── entity                  # Invoice, InvoicePayment, InvoiceAmountAdjustment
+│   │   │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
+│   │   ├── enums                   # InvoiceKind, InvoiceStatus, AdjustedBy
+│   │   ├── repository              # InvoiceRepository(잠금 조회 findByIdForUpdate), InvoicePaymentRepository, InvoiceAmountAdjustmentRepository
+│   │   └── exception               # InvoiceException + code/InvoiceErrorCode (INVOICE404_1, INVOICE409_1 ~ 409_5)
 │   ├── participant                 # 참여자 도메인 (과외에 속한 학부모 · 학생, 링크 토큰)
 │   │   ├── entity/Participant.java
 │   │   ├── enums                   # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
