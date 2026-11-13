@@ -1,200 +1,116 @@
 # 아키텍처
 
 > 최종 수정: 2026-11-13
-> 전체 구조와 요청 처리 흐름. 세부 규칙은 `.claude/rules/`의 각 파일에 있다.
+> 전체 구조와 요청 처리 흐름. 세부 규칙은 `.claude/rules/`, 테이블은 `docs/erd.md`, 엔드포인트는 `docs/api-spec.md`.
 
 ## 기술 스택
 
-| 항목 | 버전 / 내용 |
-| --- | --- |
-| 언어 | Java 21 (Gradle toolchain) |
-| 프레임워크 | Spring Boot 4.1.1 |
-| 빌드 | Gradle 9.8.1 (wrapper) |
-| DB | MySQL 8 (`mysql-connector-j`), Spring Data JPA / Hibernate |
-| 보안 | Spring Security + OAuth2 Client (카카오) |
-| 검증 | Bean Validation (`spring-boot-starter-validation`) |
-| 보일러플레이트 | Lombok (main / test 양쪽) |
+Java 21 · Spring Boot 4.1.1 · Gradle 9.8.1 · MySQL 8 + Spring Data JPA(Hibernate) · Redis(토큰 저장소) · Spring Security OAuth2 Client(카카오) + JWT · Bean Validation · Lombok · springdoc(Swagger).
 
-Boot 4라서 스타터 이름이 Boot 3와 다르다 (`spring-boot-starter-webmvc`, `...-webmvc-test`, `...-data-jpa-test`). 자세한 내용은 `CLAUDE.md` 참고.
+Boot 4라서 스타터 이름이 Boot 3와 다르다 (`spring-boot-starter-webmvc`, `...-webmvc-test`, `...-data-jpa-test`). `CLAUDE.md` 참고.
 
 ## 패키지 구조
 
 ```
 com.sudam
-├── SudamApplication.java
-├── domain                          # 비즈니스 도메인별 수직 분할
-│   ├── auth                        # 인증 도메인 (토큰 재발급·로그아웃)
-│   │   ├── controller/AuthController.java
-│   │   ├── service/AuthService.java
-│   │   ├── dto
-│   │   │   ├── TokenPair.java            # 서비스 반환형 (AT는 본문, RT는 쿠키)
-│   │   │   └── response/TokenReissueResponse.java
-│   │   └── exception
-│   │       ├── AuthException.java        # extends ProjectException
-│   │       └── code
-│   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
-│   │           └── AuthSuccessCode.java  # AUTH200_1
-│   ├── participant                 # 참여자 도메인 (과외에 속한 학부모 · 학생, 링크 토큰)
-│   │   ├── entity/Participant.java
-│   │   ├── enums                   # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
-│   │   └── repository/ParticipantRepository.java
-│   ├── tutoring                    # 과외 도메인
-│   │   ├── entity                  # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
-│   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책을 고르는 순수 함수
-│   │   ├── enums                   # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
-│   │   └── repository              # 엔티티별 JpaRepository (정책은 과외별 목록 조회만)
-│   └── user
-│       ├── entity/User.java
-│       ├── enums                   # Role(TEACHER, PARENT, STUDENT), Provider(KAKAO)
-│       ├── repository/UserRepository.java
-│       └── service/UserService.java
-└── global                          # 도메인 공통 관심사
-    ├── ApiResponse.java            # 모든 응답의 공통 래퍼
-    ├── exception
-    │   ├── ProjectException.java   # BaseErrorCode를 품은 런타임 예외
-    │   └── code
-    │       ├── BaseErrorCode.java      # status / code / message 인터페이스
-    │       ├── BaseSuccessCode.java
-    │       ├── GeneralErrorCode.java   # COMMON400 ~ COMMON503
-    │       └── GeneralSuccessCode.java # COMMON200, COMMON201
-    ├── handler
-    │   └── GeneralExceptionHandler.java  # @RestControllerAdvice
-    ├── entity/BaseTimeEntity.java  # createdAt / updatedAt 감사
-    ├── crypto/AccountNumberConverter.java  # 계좌번호 AES-256-GCM JPA 변환기 (키: ACCOUNT_ENCRYPTION_KEY)
-    ├── config                      # SecurityConfig, JpaConfig, SwaggerConfig
-    └── security                    # 인증 인프라 (도메인 코드는 domain/auth에 있다)
-        ├── filter/JwtAuthenticationFilter.java
-        ├── token/TokenStore.java           # Redis — rt:{userId}, bl:{jti}
-        ├── util                            # JwtUtil, CookieUtil
-        ├── exception                       # EntryPoint(401), AccessDeniedHandler(403)
-        └── oauth2
-            ├── CustomOAuth2User.java        # principal (userId + Role)
-            ├── CustomOAuth2UserService.java # attributes → OAuth2Response → principal
-            ├── response                     # OAuth2Response, KakaoResponse
-            ├── exception                    # SocialLoginException
-            └── handler                      # 로그인 성공 / 실패 핸들러
+├── domain                              # 도메인별 수직 분할
+│   ├── auth                            # 토큰 재발급 · 로그아웃
+│   │   ├── controller / service
+│   │   ├── dto                         # TokenPair(서비스 반환형), response/TokenReissueResponse
+│   │   └── exception                   # AuthException, code/AuthErrorCode · AuthSuccessCode
+│   ├── user                            # 회원 · 온보딩(약관 동의 → 프로필) · 설정 · 탈퇴
+│   │   ├── controller / service
+│   │   ├── entity                      # User, Terms(시드 전용), UserTermsAgreement, TeacherProfile(PK = users.id)
+│   │   ├── enums                       # Role, Provider, Subject, TermsCode, UserStatus
+│   │   ├── repository                  # 엔티티별 JpaRepository
+│   │   ├── dto                         # request/AgreeTermsRequest · SaveProfileRequest, response/*
+│   │   └── exception                   # UserException, code/UserErrorCode · UserSuccessCode
+│   ├── tutoring                        # 과외 (엔티티 · 레포지토리만, API는 아직 없다)
+│   │   ├── entity                      # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
+│   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책 행을 고르는 순수 함수
+│   │   ├── enums                       # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
+│   │   └── repository
+│   └── participant                     # 과외에 속한 학부모 · 학생 (엔티티 · 레포지토리만)
+│       ├── entity/Participant.java
+│       ├── enums                       # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
+│       └── repository
+└── global                              # 공통 관심사
+    ├── ApiResponse.java                # 모든 응답의 래퍼
+    ├── exception                       # ProjectException, code/Base*Code · General*Code
+    ├── handler/GeneralExceptionHandler # @RestControllerAdvice
+    ├── entity/BaseTimeEntity.java      # createdAt / updatedAt 감사
+    ├── crypto/AccountNumberConverter   # 계좌번호 AES-256-GCM JPA 변환기
+    ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig
+    └── security                        # 인증 인프라 (코드 enum은 domain/auth에 둔다)
+        ├── filter/JwtAuthenticationFilter
+        ├── token/TokenStore            # Redis — rt:{userId}, bl:{jti}
+        ├── util                        # JwtUtil, CookieUtil
+        ├── exception                   # EntryPoint(401), AccessDeniedHandler(403)
+        └── oauth2                      # CustomOAuth2User(principal), CustomOAuth2UserService, KakaoResponse, 성공 · 실패 핸들러
 ```
 
-**성공/에러 코드 enum은 항상 `<스코프>/exception/code/`에 둔다.** 예외 클래스는 그 한 단계 위 `exception/`이다. 코드 enum은 도메인 자산이므로 인증 코드도 `global/security`가 아니라 `domain/auth/exception/code/`에 있고, `global/security`에는 필터·토큰 저장소·유틸·OAuth2 배선만 남는다.
-
-도메인이 늘어나면 `domain.<도메인>` 아래에 `controller` / `service` / `repository` / `entity` / `dto` / `enums` / `exception`(+`exception/code`)을 둔다 (`.claude/rules/code-convention.md`).
+새 도메인은 `domain.<도메인>` 아래에 `controller / service / repository / entity / dto / enums / exception(+code)`를 둔다. 성공 · 에러 코드 enum은 항상 `<스코프>/exception/code/`, 예외 클래스는 그 한 단계 위다.
 
 ## 요청 처리 흐름
 
 ### 일반 API
 
 ```
-Client
-  → SecurityFilterChain (인증 확인, STATELESS)
-  → Controller      요청 바인딩 + @Valid 검증, 응답 조립만
-  → Service         @Transactional 경계, 비즈니스 규칙, 실패 시 ProjectException
-  → Repository      JpaRepository
-  → Service         엔티티 → 응답 DTO 변환 (open-in-view: false이므로 여기서 끝내야 한다)
-  → Controller      ApiResponse<T> (201 Created만 ResponseEntity로 감싼다)
+SecurityFilterChain(STATELESS) → Controller(@Valid, 응답 조립) → Service(@Transactional, 규칙, DTO 변환) → Repository
 ```
 
-예외는 어디서 던져도 `GeneralExceptionHandler`가 받아 `ApiResponse.onFailure(...)` 하나의 포맷으로 변환한다. 컨트롤러·서비스에서 에러 `ResponseEntity`를 직접 만들지 않는다.
+- 예외는 어디서 던져도 `GeneralExceptionHandler`가 `ApiResponse.onFailure`로 바꾼다. 컨트롤러에서 에러 응답을 직접 만들지 않는다.
+- `open-in-view: false`라 지연 로딩은 서비스 안에서 끝낸다.
+- 201 Created만 `ResponseEntity`로 감싼다.
 
 ### 소셜 로그인
 
 ```
-GET /oauth2/authorization/kakao
-  → 카카오 인가 페이지
-  → GET /login/oauth2/code/kakao (code)
-  → CustomOAuth2UserService.loadUser
-        DefaultOAuth2UserService로 user-info 조회
-        registrationId 분기 → KakaoResponse (provider / providerId / email / name)
-        필수 동의 항목 누락 시 AuthException(AUTH401_1)
-        → CustomOAuth2User(userId, Role)
-  → 성공: OAuth2LoginSuccessHandler
-        AT·RT 발급 → TokenStore.saveRefreshToken(rt:{userId}, 14일)
-        302 {프론트}#accessToken={AT} + Set-Cookie: refreshToken (HttpOnly)
-  → 실패: OAuth2LoginFailureHandler
-        302 {프론트}#code={에러 코드}
+GET /oauth2/authorization/kakao → 카카오 → GET /login/oauth2/code/kakao
+  → CustomOAuth2UserService.loadUser   KakaoResponse 파싱, 필수 동의 누락 → AUTH401_1, UserService.findOrCreate
+  → 성공: AT·RT 발급, rt:{userId} 저장(14일), 302 {프론트}#accessToken={AT} + Set-Cookie refreshToken(HttpOnly)
+  → 실패: 302 {프론트}#code={에러 코드}
 ```
 
-인증 필터 단계의 예외는 `@RestControllerAdvice`에 도달하지 않는다. `OAuth2LoginFailureHandler`가 직접 처리한다.
+필터 단계 예외는 `@RestControllerAdvice`에 오지 않고 `OAuth2LoginFailureHandler`가 처리한다.
 
-### 인증이 필요한 요청
-
-```
-Authorization: Bearer {AT}
-  → JwtAuthenticationFilter
-        JwtUtil.parseAccessToken   서명·만료·typ=access  실패 → AUTH401_3
-        TokenStore.isBlacklisted(jti)  차단됨 → AUTH401_4
-        → SecurityContext에 CustomOAuth2User(userId, Role)
-  → (실패 시) 사유만 request attribute에 담고 체인 통과
-       → AuthorizationFilter가 거부 → CustomAuthenticationEntryPoint
-       → handlerExceptionResolver → ApiResponse.onFailure
-```
-
-### 토큰 재발급 (RTR)
+### 인증 · 토큰
 
 ```
-POST /api/v1/auth/reissue   (permitAll, Cookie: refreshToken)
-  → JwtUtil.parseRefreshToken        실패 → AUTH401_3
-  → TokenStore.findRefreshToken(userId)
-        없음        → AUTH401_5
-        값 불일치    → rt:{userId} 삭제 후 AUTH401_6  (탈취 의심)
-        일치        → 새 AT·RT 발급 → rt:{userId} 덮어쓰기
-  → ApiResponse(AUTH200_1) { accessToken } + Set-Cookie: refreshToken
+Authorization: Bearer {AT} → JwtAuthenticationFilter
+  서명 · 만료 · typ=access 실패 → AUTH401_3 / bl:{jti}에 있음 → AUTH401_4 / 통과 → CustomOAuth2User(userId, Role)
+
+POST /auth/reissue (permitAll, Cookie refreshToken)   RTR
+  rt:{userId} 없음 → AUTH401_5 / 불일치 → rt 삭제 후 AUTH401_6 / 일치 → 새 AT·RT, rt 덮어쓰기
+
+POST /auth/logout, DELETE /users/me
+  rt:{userId} 삭제, bl:{jti} 등록(TTL = AT 남은 시간), 쿠키 삭제. 탈퇴는 withdrawn_at 기록 + email · provider_id NULL
 ```
 
-한 번 쓴 RT를 다시 보내면 그 회원의 세션이 모두 끊긴다. AT와 RT 모두 `jti`를 가져 발급마다 값이 달라진다.
-
-### 로그아웃 / 회원 탈퇴
+### 온보딩
 
 ```
-POST /api/v1/auth/logout        AuthService.logout(bearer)
-DELETE /api/v1/users/me         UserService.withdraw(userId) + AuthService.logout(bearer)
-
-AuthService.logout
-  → rt:{userId} 삭제
-  → bl:{jti} 등록 (TTL = AT 남은 만료 시간, 최대 30분)
-  → Set-Cookie: refreshToken=; Max-Age=0
-
-UserService.withdraw
-  → users.withdrawn_at = now(), email = NULL, provider_id = NULL
-  → provider_id가 NULL이라 같은 소셜 계정으로 재로그인하면 새 회원으로 가입
+GET  /users/me                   status 계산(저장 안 함): 필수 약관 미동의 → TERMS_REQUIRED, 프로필 없음 → PROFILE_REQUIRED, 그 외 ACTIVE
+POST /users/me/terms-agreements  현재 시행 중인(effective_at <= now, code별 최신 version) 필수 약관이 빠지면 USER400_1. 멱등
+POST /users/me/profile           이미 있으면 USER409_1
+PUT  /users/me/profile           없으면 USER404_2. 전체 교체 후 flush로 updated_at 확정
+GET  /users/me/settings          profile · provider만 DB 값, 소개서 · 결제 · 알림은 고정 기본값
 ```
 
-세션이 STATELESS라 발급된 AT는 서버가 따로 막지 않으면 만료까지 유효하다. 그래서 차단 목록이 필요하다.
+과목은 `Subject` enum이고 `teacher_profiles.subjects`는 enum 이름 배열 JSON 컬럼이다. `OTHER`일 때만 `subject_other`를 쓴다.
 
-### 온보딩 (약관 동의 → 프로필)
+## 설정 / 실행 전제
 
-```
-GET  /api/v1/users/me                    status 계산 (저장하지 않음)
-  → 현재 시행 중인 약관 = terms(effective_at <= now)를 code별 최신 version으로 축약
-  → 필수 약관 수 > 동의 행 수      → TERMS_REQUIRED
-  → teacher_profiles 행 없음        → PROFILE_REQUIRED
-  → 그 외                           → ACTIVE
-
-POST /api/v1/users/me/terms-agreements   필수 약관이 빠지면 저장 전에 USER400_1
-  → 코드마다 현재 버전 Terms에 대해 기존 동의 행이 있으면 재사용, 없으면 저장 (멱등)
-
-POST /api/v1/users/me/profile            existsById → USER409_1
-PUT  /api/v1/users/me/profile            findById   → USER404_2, 전체 교체 후 flush로 updated_at 확정
-  → subjects에 OTHER가 없으면 subjectOther는 null로 정규화, 있는데 공백이면 USER400_2
-
-GET  /api/v1/users/me/settings           profile · provider만 DB 값, 나머지는 고정 기본값
-```
-
-과목은 테이블 없이 `Subject` enum이고, `teacher_profiles.subjects`는 enum 이름 배열을 담는 JSON 컬럼이다 (`docs/erd.md`).
-
-## 설정 / 프로파일
-
-- `application.yaml` — 공통 설정. `optional:file:.env[.properties]`를 import해 비밀값을 환경 변수로 받는다.
-- `application-local.yaml` — 로컬 전용 (카카오 redirect-uri, 프론트 리다이렉트 URI, Redis 호스트·포트). 기본 활성 프로파일은 `local`.
-- 필요한 `.env` 키: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET`, `JWT_SECRET`, `ACCOUNT_ENCRYPTION_KEY` (`.env.example` 참고). `ACCOUNT_ENCRYPTION_KEY`는 Base64로 인코딩한 32바이트(`openssl rand -base64 32`)이고, 없거나 길이가 틀리면 기동 시점에 실패한다. 키를 바꾸면 기존 계좌번호를 복호화할 수 없다. Redis 접속 정보는 `.env`가 아니라 프로파일 파일에 둔다.
-- **MySQL과 Redis가 모두 떠 있어야 한다.** Redis가 없으면 부팅은 되지만 로그인 성공 처리와 인증 요청이 깨진다 (`CLAUDE.md` 실행 전제).
-- JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`, `format_sql: true`.
-- 시드: `spring.sql.init.mode: always` + `defer-datasource-initialization: true`라서 스키마 생성 뒤 `src/main/resources/data.sql`이 매번 실행된다. 현재는 약관 3행(`terms`)만 넣는다. 약관 행은 코드로 만들지 않으므로 새 버전은 이 파일에 추가한다.
-- Swagger(OpenAPI): `SwaggerConfig`가 제목(`SUDAM API 명세`)과 JWT 보안 스키마(`bearerAuth`)만 정의한다. UI는 `/swagger-ui.html`, 문서는 `/v3/api-docs`이며 두 경로 모두 `SecurityConfig.allowUris`로 공개돼 있다. Authorize 창에는 `Bearer ` 없이 액세스 토큰만 넣는다.
+- `application.yaml`이 `optional:file:.env[.properties]`를 import한다. 키: `DB_URL` `DB_USERNAME` `DB_PASSWORD` `KAKAO_CLIENT_ID` `KAKAO_CLIENT_SECRET` `JWT_SECRET` `ACCOUNT_ENCRYPTION_KEY`(Base64 32바이트, 없거나 길이가 틀리면 기동 실패). Redis 호스트 · 포트와 리다이렉트 URI는 `application-local.yaml`.
+- MySQL과 Redis가 모두 떠 있어야 한다. Redis가 없으면 부팅은 되지만 로그인과 인증 요청이 깨진다.
+- JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`.
+- 시드: `spring.sql.init.mode: always`로 스키마 생성 뒤 `data.sql`이 매번 실행된다. 현재는 약관 3행. 약관은 코드로 만들지 않으므로 새 버전은 이 파일에 행을 추가한다.
+- Swagger: `/swagger-ui.html`, `/v3/api-docs`. `@Tag` · `@Operation` 요약만 담고 에러 코드별 응답은 `docs/api-spec.md`가 기준이다.
 
 ## 아직 정해지지 않은 것
 
-- **다중 기기 로그인** — `rt:{userId}`가 회원당 1개라 두 번째 로그인이 첫 세션을 무효화한다. 기기별로 두려면 키 구조를 바꿔야 한다.
-- **탈퇴 보강** — 카카오 연결 끊기(unlink, ERD 1.2.3), 재가입 제한 정책, 연락처가 담긴 타 도메인 데이터 정리가 빠져 있다.
-- **운영 프로파일** — `application-prod.yaml`, `ddl-auto` 운영 전략, 마이그레이션 도구(Flyway 등) 미도입. 배포 시 `CookieUtil`의 `secure(true)` / `SameSite=None` 전환도 함께 필요하다.
-- **CORS** — `SecurityConfig`에 설정이 없다. 프론트 연동 시 추가 필요.
-- **API 명세 문서의 역할 분담** — Swagger는 `@Tag`·`@Operation` 수준의 요약만 담는다. 에러 코드별 응답 예시는 여전히 `docs/api-spec.md` 수동 관리다.
+- 다중 기기 로그인 — `rt:{userId}`가 회원당 1개라 두 번째 로그인이 첫 세션을 끊는다.
+- 탈퇴 보강 — 카카오 unlink, 재가입 제한, 타 도메인 연락처 정리.
+- 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구, 쿠키 `secure` / `SameSite=None` 전환.
+- CORS — `SecurityConfig`에 설정 없음.
+- ERD의 생성 컬럼 + 유일 제약 — `ddl-auto`로 만들 수 없어 마이그레이션 도구 도입 전까지 서비스에서 보장한다.
