@@ -13,6 +13,7 @@ paths:
 `SecurityConfig`의 단일 `SecurityFilterChain`:
 
 - `csrf`, `httpBasic`, `formLogin` 비활성화. 세션은 `SessionCreationPolicy.STATELESS`.
+- CORS는 `corsConfigurationSource` 빈으로 켠다. 허용 출처는 프로파일별 `app.cors.allowed-origins`(개발 서버는 `FRONT_BASE_URL` + 로컬 프론트)에서 읽고, RT 쿠키를 주고받아야 해서 자격 증명을 허용한다(출처에 `*` 불가). 허용 헤더는 `Authorization` · `Content-Type`.
 - `allowUris`(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger 경로 `/swagger-ui/**`·`/swagger-ui.html`·`/v3/api-docs/**`)만 `permitAll`, 나머지는 `authenticated`. 재발급은 AT가 만료된 상태로 호출되므로 인증을 걸 수 없고, 인증 주체가 RT 쿠키다.
 - `oauth2Login`에 `CustomOAuth2UserService`(userInfo) + `OAuth2LoginSuccessHandler` + `OAuth2LoginFailureHandler`를 연결.
 - `JwtAuthenticationFilter`를 `UsernamePasswordAuthenticationFilter` 앞에 등록(빈이 아니라 `new`로 만들어 `JwtUtil`·`TokenStore`를 넘긴다). `exceptionHandling`에 `CustomAuthenticationEntryPoint`(401) + `CustomAccessDeniedHandler`(403) 연결.
@@ -62,10 +63,10 @@ paths:
 
 ## 남아 있는 TODO (건드릴 때 함께 처리)
 
-- RT 쿠키가 로컬 기준(`secure` 없음 / `SameSite=Lax`)이다. HTTPS·다른 도메인으로 배포하면 `CookieUtil`에서 `secure(true)` / `sameSite("None")`으로 바꿔야 한다.
+- RT 쿠키는 `SameSite=Lax` 고정이고 `Secure`만 프로파일별 `app.cookie.secure`를 따른다(로컬 false, 개발 서버 true). 프론트(`sudam.app`)와 API(`api.sudam.app`)가 같은 사이트라 Lax로 충분하다. 프론트를 **다른 사이트**(다른 등록 도메인)로 옮기면 `sameSite("None")`으로 바꿔야 한다.
 - 다중 기기 로그인을 지원하지 않는다. `rt:{userId}`가 회원당 1개라 두 번째 로그인이 첫 번째 세션의 RT를 무효화한다. 기기별로 두려면 키를 `rt:{userId}:{deviceId}`로 바꿔야 한다.
 - 로그아웃·탈퇴는 **요청에 쓰인 AT 하나만** 차단한다. 다른 기기의 AT가 살아 있다면 만료(최대 30분)까지 유효하다.
 - AT 없이 RT 쿠키만으로 로그아웃하는 경로가 없다. AT가 만료됐으면 재발급 후 로그아웃해야 한다.
 - 탈퇴 시 카카오 연결 끊기(unlink)를 호출하지 않는다 (ERD 1.2.3). 넣을 때는 외부 API 호출이므로 트랜잭션 밖에서 처리한다.
 - 탈퇴가 `users` 행만 정리한다. 연락처가 담긴 다른 테이블(`tutoring_drafts` 등)은 해당 도메인이 생길 때 함께 처리한다.
-- CORS 설정이 없다. 프론트를 다른 도메인에 배포하면 `SecurityConfig`에 추가해야 한다.
+- 프론트 출처가 늘거나 바뀌면 `SecurityConfig`가 아니라 프로파일 yaml의 `app.cors.allowed-origins`를 고친다. 새 요청 헤더를 쓰게 되면 `corsConfigurationSource`의 허용 헤더에 추가한다.

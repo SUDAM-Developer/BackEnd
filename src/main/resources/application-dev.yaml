@@ -1,0 +1,36 @@
+# 개발 서버(EC2 + docker-compose) 프로파일. compose가 SPRING_PROFILES_ACTIVE=dev로 켠다.
+server:
+  # Nginx가 HTTPS를 받아 HTTP로 넘기므로, Nginx가 보낸 X-Forwarded-Proto · Host로 원래 주소(https)를 복원한다.
+  # 없으면 Swagger가 서버 주소를 http로 만들어 HTTPS 페이지에서 호출이 차단된다. 앱은 루프백으로만 열려 있어 헤더를 신뢰해도 된다.
+  forward-headers-strategy: native
+
+spring:
+  jpa:
+    hibernate:
+      # 기본값 create는 부팅마다 스키마를 지우므로, RDS 데이터가 남도록 update를 쓴다.
+      ddl-auto: update
+
+  data:
+    redis:
+      # 컨테이너 안의 localhost는 자기 자신이므로 compose 서비스명으로 연결한다.
+      host: redis
+      port: 6379
+
+  security:
+    oauth2:
+      client:
+        registration:
+          kakao:
+            # 카카오 개발자 콘솔에도 같은 URI를 등록해야 한다.
+            redirect-uri: ${APP_BASE_URL}/login/oauth2/code/kakao
+
+app:
+  oauth2:
+    success-redirect-uri: ${FRONT_BASE_URL}/login/success
+    failure-redirect-uri: ${FRONT_BASE_URL}/login/failure
+  cookie:
+    # 개발 서버는 HTTPS이므로 RT 쿠키를 HTTPS 요청에만 싣는다
+    secure: true
+  cors:
+    # 배포된 프론트(FRONT_BASE_URL)와, 개발 서버 API를 쓰는 로컬 프론트
+    allowed-origins: ${FRONT_BASE_URL}, http://localhost:8081

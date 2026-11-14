@@ -204,7 +204,6 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 
 - 다중 기기 로그인 — `rt:{userId}`가 회원당 1개라 두 번째 로그인이 첫 세션을 끊는다.
 - 탈퇴 보강 — 카카오 unlink, 재가입 제한, 타 도메인 연락처 정리.
-- 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구, 쿠키 `secure` / `SameSite=None` 전환.
-- CORS — `SecurityConfig`에 설정 없음.
+- 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구. 개발 서버는 `application-dev.yaml`(`ddl-auto: update`, 쿠키 `Secure`, 도메인 기준 리다이렉트 · CORS 출처)을 쓴다.
 - ERD의 생성 컬럼 + 유일 제약 — `ddl-auto`로 만들 수 없어 마이그레이션 도구 도입 전까지 서비스에서 보장한다.
 - 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산은 수업 기록 저장이 같은 트랜잭션에서 실행한다 (`RecordService` → `SettlementService.settleIfReached`).

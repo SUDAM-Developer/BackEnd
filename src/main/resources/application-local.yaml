@@ -15,3 +15,8 @@ app:
   oauth2:
     success-redirect-uri: http://localhost:8081/login/success
     failure-redirect-uri: http://localhost:8081/login/failure
+  cookie:
+    # 로컬은 HTTP라 Secure 쿠키를 쓰지 않는다 (Secure면 일부 브라우저가 HTTP에서 쿠키를 저장하지 않는다)
+    secure: false
+  cors:
+    allowed-origins: http://localhost:8081

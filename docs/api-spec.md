@@ -103,7 +103,7 @@
 | `POST` | `/api/v1/auth/logout` | 로그아웃 |
 
 **카카오 콜백** — 필수 동의: `profile_nickname`, `account_email` (누락 시 `AUTH401_1`). 리다이렉트 대상은 `app.oauth2.success-redirect-uri` / `failure-redirect-uri`.
-- 성공: `302 {성공 URI}#accessToken={AT}` + `Set-Cookie: refreshToken={RT}; Path=/; Max-Age=1209600; HttpOnly; SameSite=Lax`
+- 성공: `302 {성공 URI}#accessToken={AT}` + `Set-Cookie: refreshToken={RT}; Path=/; Max-Age=1209600; HttpOnly; SameSite=Lax` (개발 서버는 `Secure` 추가)
 - 실패: `302 {실패 URI}#code={에러 코드}`
 
 **인증 필터** — 서명 · 만료 · `typ=access` 확인 후 `jti`가 Redis 차단 목록(`bl:{jti}`)에 있는지 본다. AT 30분 / RT 14일.

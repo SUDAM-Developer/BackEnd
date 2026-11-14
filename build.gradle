@@ -44,3 +44,8 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// 실행 jar(bootJar)만 만든다. plain jar가 함께 생기면 Dockerfile의 COPY build/libs/*.jar가 파일 두 개와 매칭돼 실패한다.
+tasks.named('jar') {
+	enabled = false
+}
