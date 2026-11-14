@@ -1,5 +1,7 @@
 package com.sudam.domain.record.service;
 
+import com.sudam.domain.settlement.dto.SettlementResult;
+import com.sudam.domain.settlement.service.SettlementService;
 import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import com.sudam.domain.cycle.repository.CycleRepository;
@@ -71,6 +73,7 @@ class RecordServiceTest {
     @Mock private SessionRepository sessionRepository;
     @Mock private SessionRecordRepository sessionRecordRepository;
     @Mock private SessionProgressRepository sessionProgressRepository;
+    @Mock private SettlementService settlementService;
 
     @InjectMocks
     private RecordService recordService;
@@ -110,6 +113,7 @@ class RecordServiceTest {
         });
         Session previous = Session.completeRegular(tutoring, cycle, schedule, WEDNESDAY.minusWeeks(1));
         given(sessionRepository.findRecognizedInCycle(88L)).willAnswer(invocation -> List.of(previous, saved.get(0)));
+        given(settlementService.settleIfReached(TUTORING_ID)).willReturn(SettlementResult.notSettled());
         TutoringPolicy policy = mock(TutoringPolicy.class);
         given(policy.getEffectiveCycleNo()).willReturn(1);
         given(policy.getSettlementSessionCnt()).willReturn(8);
@@ -187,6 +191,39 @@ class RecordServiceTest {
 
         assertRecordError(TEACHER_ID, request(WEDNESDAY, 7, 7), "RECORD409_1");
         verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("정산 회차를 채우면 정산 결과(사이클 · 리포트 · 청구 ID)를 응답에 싣고, 현황은 닫은 사이클 기준이다")
+    void 정산_회차_도달() {
+        // given
+        givenTutoring();
+        givenSchedule();
+        givenTextbook();
+        given(sessionRepository.existsByScheduleIdAndOriginalDate(SCHEDULE_ID, WEDNESDAY)).willReturn(false);
+        given(cycleRepository.findByTutoringIdAndStatus(TUTORING_ID, CycleStatus.IN_PROGRESS))
+                .willReturn(Optional.of(cycle));
+        List<Session> saved = new ArrayList<>();
+        given(sessionRepository.save(any(Session.class))).willAnswer(invocation -> {
+            Session session = withId(invocation.<Session>getArgument(0), 1198L);
+            saved.add(session);
+            return session;
+        });
+        Session previous = Session.completeRegular(tutoring, cycle, schedule, WEDNESDAY.minusWeeks(1));
+        given(sessionRepository.findRecognizedInCycle(88L)).willAnswer(invocation -> List.of(previous, saved.get(0)));
+        TutoringPolicy policy = mock(TutoringPolicy.class);
+        given(policy.getEffectiveCycleNo()).willReturn(1);
+        given(policy.getSettlementSessionCnt()).willReturn(2);
+        given(tutoringPolicyRepository.findAllByTutoringId(TUTORING_ID)).willReturn(List.of(policy));
+        given(settlementService.settleIfReached(TUTORING_ID)).willReturn(SettlementResult.settled(88L, 21L, 301L));
+
+        // when
+        SaveRecordResponse response = recordService.save(TEACHER_ID, TUTORING_ID, request(WEDNESDAY, 7, 7));
+
+        // then
+        assertThat(response.noInCycle()).isEqualTo(2);
+        assertThat(response.cycle()).isEqualTo(new SaveRecordResponse.CycleSummary(1, 2, 2));
+        assertThat(response.settlement()).isEqualTo(new SaveRecordResponse.Settlement(true, 88L, 21L, 301L));
     }
 
     @Test

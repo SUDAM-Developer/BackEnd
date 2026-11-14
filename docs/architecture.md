@@ -35,10 +35,11 @@ com.sudam
 │   │   ├── entity/Participant.java
 │   │   ├── enums                       # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
 │   │   └── repository
-│   ├── session                         # 수업 회차 (엔티티 · 레포지토리만)
+│   ├── session                         # 수업 회차
 │   │   ├── entity/Session.java         # completeRegular = 정규 회차 기록
 │   │   ├── enums                       # SessionType, SessionStatus
-│   │   └── repository                  # 일정 · 날짜 중복 확인, 사이클의 인정 회차 정렬 조회
+│   │   ├── repository                  # 일정 · 날짜 중복 확인, 사이클 인정 회차의 정렬 조회 · 수 · 첫/마지막 날짜, 날짜 범위 휴강
+│   │   └── service/SessionCycleReader  # 정산 포트 CycleSessionReader 구현 (MANDATORY)
 │   ├── record                          # 수업 기록 · 회차 진도
 │   │   ├── controller / service        # POST /api/v1/tutorings/{tutoringId}/records
 │   │   ├── entity                      # SessionRecord, SessionProgress (둘 다 회차를 가리킴)
@@ -46,6 +47,14 @@ com.sudam
 │   │   ├── repository
 │   │   ├── dto                         # request/SaveRecordRequest, response/SaveRecordResponse
 │   │   └── exception                   # RecordException, code/RecordErrorCode · RecordSuccessCode
+│   ├── report                          # 정산 리포트 (요약 · 진도)
+│   │   ├── controller / service        # GET /api/v1/reports/{reportId} (ReportService)
+│   │   ├── service                     # SettlementReportFactory = 정산 포트 SettlementReportCreator 구현 (MANDATORY), ReportCalculator(순수 함수: 수행률 · 진도 라벨)
+│   │   ├── entity                      # SettlementReport(통계 스냅샷), SettlementReportProgress(교재별 진도 표)
+│   │   ├── enums                       # ReportStatus, ReportTextbookStatus
+│   │   ├── repository
+│   │   ├── dto/response/ReportResponse
+│   │   └── exception                   # ReportException, code/ReportErrorCode · ReportSuccessCode
 │   ├── cycle                           # 수업 사이클 = 정산 단위 묶음 (엔티티 · 레포지토리만)
 │   │   ├── entity/Cycle.java           # open / settle / isInProgress
 │   │   ├── enums/CycleStatus.java      # IN_PROGRESS, SETTLED
@@ -60,8 +69,7 @@ com.sudam
 │   └── settlement                      # 정산 실행 (컨트롤러 없음. 기록 저장이 같은 트랜잭션에서 호출)
 │       ├── service                     # SettlementService.settleIfReached (MANDATORY), InvoiceAmountCalculator(순수 함수)
 │       ├── dto/SettlementResult        # 기록 저장 응답의 settlement { settled, cycleId, reportId, invoiceId }
-│       ├── port                        # 회차 · 리포트 담당(김강민)이 구현할 인터페이스: CycleSessionReader(+CyclePeriod), SettlementReportCreator
-│       │   └── placeholder             # 구현 병합 전 부팅용 임시 구현 (호출 시 UnsupportedOperationException). 구현 병합 PR에서 삭제
+│       ├── port                        # 정산이 쓰는 인터페이스: CycleSessionReader(+CyclePeriod, 구현은 session), SettlementReportCreator(구현은 report)
 │       └── exception                   # SettlementException, code/SettlementErrorCode (SETTLEMENT500_1)
 └── global                              # 공통 관심사
     ├── ApiResponse.java                # 모든 응답의 래퍼
@@ -156,4 +164,4 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 - 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구, 쿠키 `secure` / `SameSite=None` 전환.
 - CORS — `SecurityConfig`에 설정 없음.
 - ERD의 생성 컬럼 + 유일 제약 — `ddl-auto`로 만들 수 없어 마이그레이션 도구 도입 전까지 서비스에서 보장한다.
-- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산 실행 서비스(`settlement`)만 있고, 회차 · 리포트 구현은 `port.placeholder` 임시 구현이다.
+- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산은 수업 기록 저장이 같은 트랜잭션에서 실행한다 (`RecordService` → `SettlementService.settleIfReached`).

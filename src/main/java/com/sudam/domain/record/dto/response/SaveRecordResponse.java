@@ -1,5 +1,7 @@
 package com.sudam.domain.record.dto.response;
 
+import com.sudam.domain.settlement.dto.SettlementResult;
+
 /**
  * 수업 기록 저장 응답. 저장한 회차와, 그 회차가 속한 사이클의 진행 현황 · 정산 결과를 담는다.
  */
@@ -33,7 +35,7 @@ public record SaveRecordResponse(
 
     public record Settlement(
 
-            // 정산 실행 여부. 정산 기능 전까지는 항상 false
+            // 이번 기록으로 정산을 실행했는지
             boolean settled,
 
             // 정산된 사이클 ID. 정산하지 않았으면 null
@@ -48,21 +50,23 @@ public record SaveRecordResponse(
     }
 
     /***
-     * 함수 기능: 정산하지 않은 기록 저장 응답을 만든다. settlement는 settled = false, 나머지 ID는 null로 채운다.
+     * 함수 기능: 기록 저장 응답을 만든다. 정산 결과는 정산 실행이 돌려준 값을 그대로 싣는다.
      * @param sessionId 저장한 회차 ID
      * @param noInCycle 사이클 안 번호
-     * @param cycleNo 사이클 번호
+     * @param cycleNo 사이클 번호 (정산했다면 방금 닫은 사이클)
      * @param recognizedCount 사이클의 인정 회차 수
      * @param settlementSessionCount 사이클의 정산 회차
+     * @param settlement 정산 실행 결과
      * @return 기록 저장 응답
      */
-    public static SaveRecordResponse beforeSettlement(Long sessionId, int noInCycle, int cycleNo,
-                                                      int recognizedCount, int settlementSessionCount) {
+    public static SaveRecordResponse of(Long sessionId, int noInCycle, int cycleNo, int recognizedCount,
+                                        int settlementSessionCount, SettlementResult settlement) {
         return new SaveRecordResponse(
                 sessionId,
                 noInCycle,
                 new CycleSummary(cycleNo, recognizedCount, settlementSessionCount),
-                new Settlement(false, null, null, null)
+                new Settlement(settlement.settled(), settlement.cycleId(), settlement.reportId(),
+                        settlement.invoiceId())
         );
     }
 }
