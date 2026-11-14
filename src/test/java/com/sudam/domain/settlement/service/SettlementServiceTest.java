@@ -17,6 +17,10 @@ import com.sudam.domain.tutoring.entity.TutoringPolicy;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
 import com.sudam.domain.tutoring.repository.TutoringPolicyRepository;
 import com.sudam.domain.tutoring.repository.TutoringRepository;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.enums.Subject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,6 +62,8 @@ class SettlementServiceTest {
     private static final Long REPORT_ID = 20L;
     private static final Long INVOICE_ID = 30L;
     private static final int CYCLE_NO = 3;
+    private static final TeacherProfile TEACHER = TeacherProfile.create(
+            User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null);
     private static final List<CanceledLesson> CANCELED = List.of(
             new CanceledLesson(LocalDate.of(2026, 10, 22), "TEACHER"),
             new CanceledLesson(LocalDate.of(2026, 11, 5), "HOLIDAY")
@@ -87,7 +93,8 @@ class SettlementServiceTest {
                 invoiceRepository, cycleSessionReader, settlementReportCreator, clock);
 
         tutoring = Tutoring.builder()
-                .teacherId(100L)
+                .teacher(TEACHER)
+                .subject(Subject.ENGLISH)
                 .studentName("김서아")
                 .gradeLevel(9)
                 .gradeSchoolYear(2026)
@@ -221,7 +228,12 @@ class SettlementServiceTest {
     @DisplayName("과외가 없거나 삭제됐으면 정산하지 않는다")
     void 없거나_삭제된_과외는_정산하지_않는다() {
         // given
-        Tutoring deleted = Tutoring.builder().teacherId(100L).gradeLevel(9).gradeSchoolYear(2026).build();
+        Tutoring deleted = Tutoring.builder()
+                .teacher(TEACHER)
+                .subject(Subject.ENGLISH)
+                .gradeLevel(9)
+                .gradeSchoolYear(2026)
+                .build();
         deleted.delete(NOW.minusDays(1));
         given(tutoringRepository.findByIdForUpdate(TUTORING_ID)).willReturn(Optional.of(deleted));
         given(tutoringRepository.findByIdForUpdate(2L)).willReturn(Optional.empty());

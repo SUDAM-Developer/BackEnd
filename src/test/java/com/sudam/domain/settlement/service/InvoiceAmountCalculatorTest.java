@@ -3,10 +3,16 @@ package com.sudam.domain.settlement.service;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.enums.Subject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -41,7 +47,14 @@ class InvoiceAmountCalculatorTest {
     }
 
     private TutoringPolicy policy(int tuitionFee, int settlementSessionCnt) {
-        Tutoring tutoring = Tutoring.builder().teacherId(1L).gradeLevel(9).gradeSchoolYear(2026).build();
+        TeacherProfile teacher = TeacherProfile.create(
+                User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null);
+        Tutoring tutoring = Tutoring.builder()
+                .teacher(teacher)
+                .subject(Subject.ENGLISH)
+                .gradeLevel(9)
+                .gradeSchoolYear(2026)
+                .build();
         return TutoringPolicy.builder()
                 .tutoring(tutoring)
                 .effectiveCycleNo(1)
