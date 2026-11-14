@@ -342,7 +342,7 @@ erDiagram
 | `deleted_at` | DATETIME | NULL | 논리 삭제 |
 - 제약: INDEX(teacher_id, status). 앱 검증: subject = OTHER일 때만 subject_other 필수, grade_level = 0이면 grade_other 필수.
 - 구독 판단(1.2.2): ‘수업 중’ 과외 수 = status = ACTIVE이고 deleted_at IS NULL인 행 수. 1개 이상인데 구독이 ‘이용 중’ 또는 ‘입금 대기(유예)’가 아니면 새 과외를 만들 수 없어요. 구독이 만료돼도 기존 과외의 기록 · 정산 · 학부모 링크는 그대로예요.
-- 구현 메모 (팀 결정, 위 표보다 우선): `teacher_id`는 연관관계 없는 숫자 열(`Long teacherId`, 값 = `users.id`)이에요. `teacher_profiles`가 생기기 전이라 FK를 걸지 않아요. `subject_id`도 `subjects`가 생기기 전이라 연관관계 없는 숫자 열(`Short subjectId`, NULL 허용)이에요. 두 테이블이 생기면 연관관계로 바꿀지 다시 정해요.
+- 구현 메모 (팀 결정, 위 표보다 우선): `teacher_id`는 `TeacherProfile` 연관관계(`@ManyToOne(LAZY)`)예요. `teacher_profiles`의 PK가 `users.id`라 값은 그대로 `users.id`예요. 과목은 표대로 `subject` 컬럼에 `Subject` enum 이름을 `@Enumerated(STRING)`으로 저장해요. 프로필과 같은 enum(`com.sudam.domain.user.enums.Subject`)을 써요. 예전 임시 컬럼 `subject_id`는 쓰지 않아요.
 - 공통 구현 메모 (과외 · 참여자 도메인): UNSIGNED는 붙이지 않았어요(`users`와 같음). ENUM 컬럼은 `@Enumerated(STRING)`이라 Hibernate가 MySQL ENUM으로 만들어요.
 
 ### tutoring_schedules (수업 일정)
@@ -537,6 +537,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 - 인정 여부: 기록 · 보강 기록은 TRUE. 휴강은 사유가 STUDENT_SAME_DAY이고 정책의 same_day_cancel_recognized가 TRUE일 때만 TRUE, 나머지는 FALSE (2.2.5).
 - 시간을 바꾼 회차를 나중에 기록하면 같은 행이 COMPLETED로 바뀌고 time_changed_at은 남아요.
 - cycle_id를 미인정 휴강에 넣지 않는 이유: 다음 주 수업을 미리 휴강한 뒤 그 사이 정산이 되면, 처리 시점 사이클에 휴강이 잘못 잡혀요.
+- 구현 메모 (팀 결정, 위 표보다 우선): 엔티티는 `com.sudam.domain.session.entity.Session`이에요. `cycle_id`는 `Cycle` 연관관계(`@ManyToOne(LAZY)`, NULL 허용)예요. 기록 API 범위의 컬럼만 두고 `cancel_reason` · `canceled_at` · `time_changed_at`은 휴강 · 시간 변경 기능에서 추가해요. 생성은 정규 회차 기록용 `Session.completeRegular`(REGULAR · COMPLETED · 인정 회차)만 있어요. UNSIGNED는 붙이지 않았어요.
 
 ### makeup_requests (보강 요청)
 
@@ -683,6 +684,15 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | `created_at` | DATETIME | NOT NULL | 정정 시각 |
 - 저장 시점(4.3.2): 소속 사이클의 정산 리포트가 SENT인 기록을 고칠 때만 행을 남겨요. 발송 전이면 그냥 고치고 리포트 통계를 다시 계산해요. 발송 후에는 리포트 · 교육비를 바꾸지 않아요.
 - 숙제 수행률 = (DONE + PARTIAL × 0.5) ÷ previous_homework_result IS NOT NULL인 기록 수 × 100.
+
+### 기록 구현 메모 (팀 결정, 위 표보다 우선)
+
+엔티티: `com.sudam.domain.record.entity`의 `SessionRecord` · `SessionProgress`. 저장 API는 `POST /api/v1/tutorings/{tutoringId}/records` (`RecordService.save`).
+
+- 기록과 진도는 둘 다 회차를 가리키는 단방향 연관관계(`@OneToOne(LAZY)` · `@ManyToOne(LAZY)`)예요. `Session`에는 반대편 매핑을 두지 않아요. 회차 · 기록 · 진도는 서비스가 한 트랜잭션에서 함께 저장해요.
+- `attitude` 컬럼은 P2라 두지 않았어요. 진도는 `textbooks.start_position`과 같은 SMALLINT예요.
+- 동시 기록 요청은 고려하지 않아요(비관적 락 미도입). 같은 회차를 동시에 저장하면 늦은 요청은 유니크 제약에 걸려 500이에요.
+- 아직 넣지 않은 규칙: 이미 정산된 사이클 날짜의 기록 거부(정산 기능과 함께), 종료된 과외 · 사용 종료 교재의 기록 거부.
 
 ## 7. 정산 도메인
 
