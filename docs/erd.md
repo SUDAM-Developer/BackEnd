@@ -779,6 +779,41 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | `confirmed_at` | DATETIME | NOT NULL | 수입 탭 월별 합계 기준 |
 | `canceled_at` | DATETIME | NULL | 잘못 확인한 입금 되돌리기. 합계에서 제외 |
 
+### 교육비 구현 메모 (팀 결정, 위 표보다 우선)
+
+엔티티: `com.sudam.domain.invoice.entity`의 `Invoice` · `InvoiceAmountAdjustment` · `InvoicePayment`.
+
+- `billed_cycle_id` · `report_id`는 cycles · settlement_reports 엔티티가 생기기 전이라 연관관계 없는 숫자 열이에요 (`Long billedCycleId` NOT NULL, `Long reportId` NULL, FK 없음). 컬럼 이름은 표 그대로라 연관관계로 바꿔도 스키마는 같아요.
+- `tutoring_id` · `policy_id` · `confirm_requested_by`는 `@ManyToOne(LAZY)` 연관관계예요. 과외는 정책에서 가져와서 청구와 정책의 과외가 항상 같아요.
+- `active_cycle_key` 생성 열과 UNIQUE(active_cycle_key)는 만들지 않았어요. P0에서는 정산 실행이 진행 중 사이클을 잠그고 청구를 만드는 것으로 '사이클당 취소되지 않은 청구 1개'를 보장해요.
+- UNSIGNED는 붙이지 않았어요 (과외 · 참여자 도메인과 같음).
+- 계좌 스냅샷 5개 컬럼은 `Invoice.issue`가 정책에서 복사해요. 계좌번호는 `AccountNumberConverter`로 다시 암호화돼서 정책 행과 암호문이 달라요.
+- `snapshot`은 값 객체 `InvoiceSnapshot`을 `@JdbcTypeCode(SqlTypes.JSON)`으로 저장해요. 키는 아래 6개로 고정이고, 레코드 컴포넌트 이름이 곧 키라 바꾸지 않아요. 날짜는 `yyyy-MM-dd` 문자열이에요 (Hibernate가 Jackson 2 · 3 어느 쪽을 써도 같은 JSON).
+
+| 키 | 타입 | 설명 |
+| --- | --- | --- |
+| `recognizedCount` | 숫자 \| null | 인정 회차. 선불이면 null |
+| `unitPrice` | 숫자 | 회당 단가 (수업료 ÷ 정산 회차, 원 미만 버림) |
+| `settlementSessionCount` | 숫자 | 정산 회차 |
+| `paymentTiming` | `PREPAID` \| `POSTPAID` | 선불 / 후불 |
+| `cycleStartDate` | `yyyy-MM-dd` \| null | 청구 대상 사이클 시작일. 아직 시작 전이면 null |
+| `canceledLessons` | 배열 | 휴강 내역. 각 항목 `date`(`yyyy-MM-dd`), `cancelReason`(sessions.cancel_reason의 enum 이름). 없으면 `[]` |
+
+- 상태 변경은 엔티티 메서드로만 해요. 모두 `InvoiceRepository.findByIdForUpdate`로 청구 행을 잠근 뒤 호출해요.
+
+| 메서드 | 동작 | 예외 |
+| --- | --- | --- |
+| `Invoice.issue(policy, billedCycleId, reportId, kind, amount, snapshot)` | 정책 · 계좌 복사, PENDING, calculated_amount = amount | |
+| `recordPayment(amount, confirmedAt)` | amount NULL이면 잔액 전부, 잔액보다 크면 잔액까지만. 합계 ≥ amount면 PAID, 아니면 PARTIAL. confirm_requested_*는 남김 | 취소 `INVOICE409_1`, 완납 `INVOICE409_3` |
+| `cancelPayment(payment, canceledAt)` | 입금 되돌리기. 합계로 상태 재계산 (확인 대기는 다 받은 경우가 아니면 유지) | 취소 `INVOICE409_1` |
+| `requestConfirm(participant, requestedAt)` | PENDING · PARTIAL → CONFIRM_REQUESTED | 그 외 상태 `INVOICE409_5` |
+| `rejectConfirm()` | 합계에 따라 PENDING · PARTIAL (다 받았으면 PAID), confirm_requested_* 비움. 확인 대기가 아니면 그대로 | 취소 `INVOICE409_1` |
+| `adjustAmount(newAmount, reason, by)` | 같으면 그대로, 다르면 이력 행 + 상태 재계산 (확인 대기는 다 받은 경우가 아니면 유지) | 취소 `INVOICE409_1`, 입금 합계 미만 `INVOICE409_2` |
+| `cancel(canceledAt)` | CANCELED | |
+
+- 리포트가 발송 완료(SENT)면 금액을 바꿀 수 없다(`INVOICE409_4`)는 검사는 `adjustAmount`를 부르는 쪽(교육비 수정 API)이 해요. 리포트 엔티티가 이 도메인 밖이라서예요.
+- 입금 · 수정 이력은 `Invoice`의 `@OneToMany(mappedBy, cascade = PERSIST)`로 묶여 있어 메서드가 만든 행은 따로 저장하지 않아도 flush 때 저장돼요.
+
 ### 처리 규칙
 
 **정산 실행 (6.1.1)**: 한 트랜잭션에서 진행 중 사이클을 잠그고(SELECT … FOR UPDATE) 처리해요.

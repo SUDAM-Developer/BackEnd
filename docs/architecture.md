@@ -13,6 +13,64 @@ Boot 4라서 스타터 이름이 Boot 3와 다르다 (`spring-boot-starter-webmv
 
 ```
 com.sudam
+├── SudamApplication.java
+├── domain                          # 비즈니스 도메인별 수직 분할
+│   ├── auth                        # 인증 도메인 (토큰 재발급·로그아웃)
+│   │   ├── controller/AuthController.java
+│   │   ├── service/AuthService.java
+│   │   ├── dto
+│   │   │   ├── TokenPair.java            # 서비스 반환형 (AT는 본문, RT는 쿠키)
+│   │   │   └── response/TokenReissueResponse.java
+│   │   └── exception
+│   │       ├── AuthException.java        # extends ProjectException
+│   │       └── code
+│   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
+│   │           └── AuthSuccessCode.java  # AUTH200_1
+│   ├── invoice                     # 정산 도메인 중 교육비 청구 · 입금 · 금액 수정 이력
+│   │   ├── entity                  # Invoice, InvoicePayment, InvoiceAmountAdjustment
+│   │   │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
+│   │   ├── enums                   # InvoiceKind, InvoiceStatus, AdjustedBy
+│   │   ├── repository              # InvoiceRepository(잠금 조회 findByIdForUpdate), InvoicePaymentRepository, InvoiceAmountAdjustmentRepository
+│   │   └── exception               # InvoiceException + code/InvoiceErrorCode (INVOICE404_1, INVOICE409_1 ~ 409_5)
+│   ├── participant                 # 참여자 도메인 (과외에 속한 학부모 · 학생, 링크 토큰)
+│   │   ├── entity/Participant.java
+│   │   ├── enums                   # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
+│   │   └── repository/ParticipantRepository.java
+│   ├── tutoring                    # 과외 도메인
+│   │   ├── entity                  # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
+│   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책을 고르는 순수 함수
+│   │   ├── enums                   # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
+│   │   └── repository              # 엔티티별 JpaRepository (정책은 과외별 목록 조회만)
+│   └── user
+│       ├── entity/User.java
+│       ├── enums                   # Role(TEACHER, PARENT, STUDENT), Provider(KAKAO)
+│       ├── repository/UserRepository.java
+│       └── service/UserService.java
+└── global                          # 도메인 공통 관심사
+    ├── ApiResponse.java            # 모든 응답의 공통 래퍼
+    ├── exception
+    │   ├── ProjectException.java   # BaseErrorCode를 품은 런타임 예외
+    │   └── code
+    │       ├── BaseErrorCode.java      # status / code / message 인터페이스
+    │       ├── BaseSuccessCode.java
+    │       ├── GeneralErrorCode.java   # COMMON400 ~ COMMON503
+    │       └── GeneralSuccessCode.java # COMMON200, COMMON201
+    ├── handler
+    │   └── GeneralExceptionHandler.java  # @RestControllerAdvice
+    ├── entity/BaseTimeEntity.java  # createdAt / updatedAt 감사
+    ├── crypto/AccountNumberConverter.java  # 계좌번호 AES-256-GCM JPA 변환기 (키: ACCOUNT_ENCRYPTION_KEY)
+    ├── config                      # SecurityConfig, JpaConfig, SwaggerConfig
+    └── security                    # 인증 인프라 (도메인 코드는 domain/auth에 있다)
+        ├── filter/JwtAuthenticationFilter.java
+        ├── token/TokenStore.java           # Redis — rt:{userId}, bl:{jti}
+        ├── util                            # JwtUtil, CookieUtil
+        ├── exception                       # EntryPoint(401), AccessDeniedHandler(403)
+        └── oauth2
+            ├── CustomOAuth2User.java        # principal (userId + Role)
+            ├── CustomOAuth2UserService.java # attributes → OAuth2Response → principal
+            ├── response                     # OAuth2Response, KakaoResponse
+            ├── exception                    # SocialLoginException
+            └── handler                      # 로그인 성공 / 실패 핸들러
 ├── domain                              # 도메인별 수직 분할
 │   ├── auth                            # 토큰 재발급 · 로그아웃
 │   │   ├── controller / service
