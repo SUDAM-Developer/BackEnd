@@ -737,6 +737,20 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 - 제약: UNIQUE(report_id, textbook_id).
 - 발송 후 기록을 고쳐도 보낸 진도 표가 바뀌지 않게 고정해요.
 
+정산 리포트 구현 메모 (#27, 위 표보다 우선)
+
+- 지금 만든 컬럼은 요약 · 진도 표뿐이에요. `settlement_reports`는 id · tutoring_id · cycle_id(UNIQUE) · 회차 수 3종 · 수행률 2종 · 이해도 3종 · status · created_at / updated_at이에요. 코멘트 · AI(`ai_status` 포함) · 발송 컬럼과 INDEX(status, scheduled_at)는 해당 기능과 함께 추가해요. 그래서 `SettlementReportCreator` 계약의 ‘ai_status = PENDING’은 아직 해당이 없어요.
+- 통계는 정산 시점에 한 번 계산하고 다시 계산하지 않아요.
+  - `completed_count` · `canceled_count`: `CycleSessionReader.countRecognized` · `canceledIn` 크기 (정산 판단과 같은 기준).
+  - `target_count`: 이 사이클 번호에 적용된 정책의 정산 회차.
+  - `homework_rate`: 인정 회차 기록의 (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수 × 100, 반올림. 결과가 없으면 NULL.
+  - `prev_homework_rate`: 직전 사이클(cycle_no − 1) 리포트의 `homework_rate`를 복사. 없으면 NULL.
+  - `understanding_*`: 인정 회차 기록의 이해도 개수.
+- 진도 표: 인정 회차의 `session_progress`를 회차 정렬 순서로 읽어, 교재마다 첫 행의 start_position ~ 마지막 행의 end_position을 라벨로 저장해요. sort_order는 교재 ID 순(0부터), textbook_status는 교재 추가 · 종료 기능 전이라 항상 ACTIVE예요.
+- 진도 라벨: UNIT `Unit 12`, CHAPTER `Chapter 3`, SECTION `3단원`, PAGE `45p`, ROUND `3회`, CUSTOM은 숫자 + custom_unit_label(`9강`).
+- 사이클 기간은 컬럼에 두지 않고 조회 때 인정 회차 MIN ~ MAX(session_date)로 계산해요. 발송 기능에서 고정이 필요하면 컬럼으로 옮겨요.
+- 휴강 사유: `sessions.cancel_reason` 컬럼이 아직 없어 `canceledIn`의 cancelReason은 NULL이에요 (휴강 기능과 함께 채움).
+
 ### settlement_report_views (리포트 열람)
 
 | 컬럼 | 타입 | 제약 | 설명 |
@@ -871,7 +885,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | `cycleStartDate` | `CycleSessionReader.period`의 시작일 | null (새 사이클은 아직 시작 전) |
 | `canceledLessons` | 이번 사이클 `canceledIn` | 방금 닫은 사이클 `canceledIn` |
 
-인터페이스 (`com.sudam.domain.settlement.port`, 구현은 김강민). 둘 다 정산 실행이 과외 행을 잠근 뒤 같은 트랜잭션에서 불러요 (새 트랜잭션을 열지 않음). 구현이 병합되기 전에는 `port.placeholder`의 임시 구현이 `UnsupportedOperationException`을 던지고, 구현이 병합되는 PR에서 이 패키지를 지워요.
+인터페이스 (`com.sudam.domain.settlement.port`, 구현은 김강민). 둘 다 정산 실행이 과외 행을 잠근 뒤 같은 트랜잭션에서 불러요 (새 트랜잭션을 열지 않음). 구현은 `CycleSessionReader` → `session.service.SessionCycleReader`, `SettlementReportCreator` → `report.service.SettlementReportFactory`이고 둘 다 `MANDATORY` 트랜잭션이에요. 임시 구현(`port.placeholder`)은 #27에서 지웠어요.
 
 | 이름 | 메서드 | 계약 |
 | --- | --- | --- |
