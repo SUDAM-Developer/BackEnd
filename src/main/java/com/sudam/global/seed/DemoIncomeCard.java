@@ -7,6 +7,7 @@ import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -60,16 +61,19 @@ record DemoIncomeCard(
 
     /***
      * 함수 기능: 사이클 2를 청구하는 선불 '다음 N회차' 청구를 만들고 카드에 맞는 상태로 바꾼다.
-     *          정산 서비스의 선불 청구와 같은 모양으로 만든다: 리포트 없음, 새 사이클은 시작 전이라 스냅샷의 인정 회차 · 시작일은 비운다.
-     * @param policy        이 과외의 정책 (사이클 1부터 적용 = 사이클 2에도 적용)
-     * @param billedCycleId 청구 대상 사이클(사이클 2) ID
-     * @param parent        확인 요청을 누른 학부모 (CONFIRM_REQUESTED일 때만 쓴다)
-     * @param now           실행 시각
+     *          정산 서비스의 선불 청구와 같은 모양으로 만든다: 리포트 없음(시드는 리포트를 만들지 않음),
+     *          스냅샷의 인정 회차 · 시작일은 방금 정산한 사이클 1 기준 (회차를 다 채워 정산했으므로 인정 회차 = 정산 회차), 휴강 없음.
+     * @param policy           이 과외의 정책 (사이클 1부터 적용 = 사이클 2에도 적용)
+     * @param billedCycleId    청구 대상 사이클(사이클 2) ID
+     * @param settledCycleStart 정산한 사이클 1의 시작일
+     * @param parent           확인 요청을 누른 학부모 (CONFIRM_REQUESTED일 때만 쓴다)
+     * @param now              실행 시각
      * @return 저장 전 Invoice
      */
-    Invoice issueInvoice(TutoringPolicy policy, Long billedCycleId, Participant parent, LocalDateTime now) {
+    Invoice issueInvoice(TutoringPolicy policy, Long billedCycleId, LocalDate settledCycleStart, Participant parent,
+                         LocalDateTime now) {
         Invoice invoice = Invoice.issue(policy, billedCycleId, null, InvoiceKind.NEXT, policy.getTuitionFee(),
-                InvoiceSnapshot.of(policy, null, null, List.of()));
+                InvoiceSnapshot.of(policy, settlementSessionCount, settledCycleStart, List.of()));
         switch (paymentState) {
             case CONFIRM_REQUESTED -> invoice.requestConfirm(parent, now.minusHours(2));
             case PENDING -> {

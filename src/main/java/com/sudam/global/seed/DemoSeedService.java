@@ -163,7 +163,7 @@ public class DemoSeedService {
         cycleRepository.save(first);
         Cycle second = cycleRepository.save(Cycle.open(base.tutoring(), 2, settledAt));
 
-        invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), base.parent(), now));
+        invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), cycleStartDate, base.parent(), now));
     }
 
     // 김서아: 사이클 1 IN_PROGRESS에 오늘 전 7회 기록. 오늘 회차 · 청구는 만들지 않는다 (오늘 기록하면 8/8로 정산).
