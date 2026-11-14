@@ -77,6 +77,7 @@ com.sudam
     ├── handler/GeneralExceptionHandler # @RestControllerAdvice
     ├── entity/BaseTimeEntity.java      # createdAt / updatedAt 감사
     ├── crypto/AccountNumberConverter   # 계좌번호 AES-256-GCM JPA 변환기
+    ├── seed                            # 시연용 가상 데이터 (sudam.seed.enabled = true일 때만 빈 생성). DemoSeedRunner → DemoSeedService, DemoIncomeCard · DemoLessonPlan(순수 함수)
     ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig, ClockConfig(Asia/Seoul Clock 빈 — 서비스는 LocalDateTime.now(clock))
     └── security                        # 인증 인프라 (코드 enum은 domain/auth에 둔다)
         ├── filter/JwtAuthenticationFilter
@@ -156,6 +157,48 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 - 시드: `spring.sql.init.mode: always`로 스키마 생성 뒤 `data.sql`이 매번 실행된다. 현재는 약관 3행(SERVICE · PRIVACY · CONTACT, 모두 필수). 약관은 코드로 만들지 않으므로 새 버전은 이 파일에 행을 추가한다.
 - Swagger: `/swagger-ui.html`, `/v3/api-docs`. `@Tag` · `@Operation` 요약만 담고 에러 코드별 응답은 `docs/api-spec.md`가 기준이다.
 - 토큰 만료: AT 30분, RT 14일 (`application.yaml`의 `jwt.*`).
+
+### 시연용 가상 데이터
+
+과외 · 참여자 생성 API가 없어 시연 데이터를 부팅 때 만든다 (`global/seed`). 정산 서비스를 거치지 않고 엔티티를 직접 만들어 한 트랜잭션으로 저장한다(중간 실패 시 아무것도 남지 않음). 날짜는 모두 `Clock` 빈(Asia/Seoul) 기준 실행일의 상대값이다.
+
+**켜는 법** — `.env`(또는 환경 변수)에 넣고 부팅한다. 프로파일이 아니라 이 값 하나로 켜고 끈다.
+
+| 키 | 기본값 | 설명 |
+| --- | --- | --- |
+| `SUDAM_SEED_ENABLED` | `false` | `true`일 때만 실행기 빈이 생긴다 (`sudam.seed.enabled`) |
+| `SUDAM_SEED_TEACHER_KAKAO_ID` | 빈 값 | 시드 선생님의 카카오 회원번호. 비우면 가짜 계정 `seed-teacher-1` |
+
+- 회원번호가 기본값이면 부팅 로그에 액세스 토큰을 한 번 출력한다 (30분 뒤 만료, 다시 받으려면 재부팅). 파일 · DB · 응답에는 남기지 않는다.
+- 회원번호를 넣으면 실제 사람 계정이므로 토큰을 출력하지 않는다. 그 카카오 계정으로 한 번 로그인해 둔 회원이 있으면 그 회원에 데이터를 붙이고, 없으면 새로 만든다. 시연 때 카카오 로그인으로 들어간다.
+
+**반복 실행** — 시드 선생님(KAKAO, 회원번호)에게 과외가 하나라도 있으면 아무것도 만들지 않고 `가상 데이터가 이미 있어 건너뜀` 로그만 남긴다. `ddl-auto: create`면 부팅마다 새로 만들어지고, `update`면 처음 한 번만 만들어진다.
+
+**데이터**
+
+- 선생님 한서윤: 프로필(영어) + 현재 시행 중인 필수 약관 동의 → `GET /users/me`의 status = `ACTIVE`.
+- 과외마다 공통: 영어 과외, 수업 일정, 교재 1권, 선불 정책(사이클 1부터, 국민은행 · 가짜 계좌, 예금주 한서윤), 공유 설정, 학부모(어머님, 가짜 번호 `010000000xx`, 링크 토큰 발급).
+- 수입 화면(T-15)용 4개 — 사이클 1 SETTLED · 사이클 2 IN_PROGRESS, 사이클 2를 청구하는 선불 '다음 N회차' 청구. 회차 · 기록은 없다.
+
+| 학생 | 정산 회차 · 수업료 | 청구 상태 | 카드 아래 줄 |
+| --- | --- | --- | --- |
+| 박지후 | 8 · 360,000 | CONFIRM_REQUESTED (실행 2시간 전 학부모 요청) | `PARENT_CONFIRMED` |
+| 윤서아 | 8 · 360,000 | PENDING, 미입금 알림 켬 | `REMINDER_SCHEDULED` |
+| 이도윤 | 4 · 200,000 | PARTIAL (실행 하루 전 120,000 입금) | `PARTIAL_PAID` |
+| 김하린 | 8 · 280,000 | PAID (실행 하루 전 전액 입금) | `NONE` |
+
+- 시연용 김서아(T-09 · T-14) — 고1 · 선불 · 8회 360,000원(회당 45,000). 수업은 18:00~19:30, 실행일이 월 · 수 · 금이면 월 · 수 · 금, 아니면 실행일 요일과 그 뒤 2일 · 4일 요일(오늘이 항상 수업일). 사이클 1 IN_PROGRESS에 오늘 **전** 수업일 7회의 기록 · 진도(수능특강 영어, Unit 1~14). 오늘 회차 · 청구(선불 첫 청구 포함)는 없다.
+- 안내일(`notified_at`)은 비어 있다. 목록은 `created_at`(실행 시각)으로 이번 달에 들어온다.
+
+**시연 순서**
+
+1. 부팅 로그의 토큰을 복사하거나(기본 계정) 카카오로 로그인한 뒤 Swagger(`/swagger-ui.html`) **Authorize**에 넣는다. 부팅 로그에 김서아 `tutoringId` · 오늘 `scheduleId` · `originalDate`가 함께 찍힌다.
+2. `GET /api/v1/invoices` → 요약 1,200,000 / 400,000 / 800,000, 카드 4장(박지후 → 윤서아 → 이도윤 → 김하린).
+3. `POST /api/v1/tutorings/{김서아 tutoringId}/records` (`scheduleId` = 오늘 요일 일정, `originalDate` = 오늘, 교재 진도 15~16) → 응답 `noInCycle: 8`, `settlement.settled = true`, `reportId` · `invoiceId`.
+4. `GET /api/v1/reports/{reportId}` → 김서아 8/8 리포트.
+5. `GET /api/v1/invoices` → 1,560,000 / 400,000 / 1,160,000, 카드 5장(김서아 '다음 8회차' 360,000이 입금 대기로 추가).
+
+**배포에서 쓸 때 주의** — 시연이 끝나면 `SUDAM_SEED_ENABLED`를 끈다. `ddl-auto: create`면 재배포(재부팅)마다 처음 상태로 돌아간다. 기본 계정의 토큰이 서버 로그에 남으므로 로그 접근 범위를 확인한다.
 
 ## 아직 정해지지 않은 것
 
