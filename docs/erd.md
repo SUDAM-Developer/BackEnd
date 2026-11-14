@@ -837,13 +837,48 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 ### 처리 규칙
 
-**정산 실행 (6.1.1)**: 한 트랜잭션에서 진행 중 사이클을 잠그고(SELECT … FOR UPDATE) 처리해요.
+**정산 실행 (6.1.1)**: `com.sudam.domain.settlement.service.SettlementService.settleIfReached(tutoringId)` → `SettlementResult(settled, cycleId, reportId, invoiceId)`.
 
-1. 인정 회차 수가 정책의 settlement_session_cnt에 닿았는지 확인
-2. 사이클을 SETTLED로 바꾸고 다음 사이클(IN_PROGRESS) 생성. 인정 회차가 정산 회차보다 많으면(P1 ‘이번 사이클부터’ 축소) 넘치는 회차의 cycle_id를 새 사이클로 옮기고, 옮긴 수가 새 사이클 정산 회차 이상이면 1부터 반복
-3. 리포트 통계 · 진도 표 행 생성 (ai_status = PENDING). 휴강 수는 이 사이클 기간의 CANCELED 행 수
-4. 청구 생성: 후불은 이번 사이클 · 이번 정책(kind = CURRENT, 인정 회차 × 회당 단가), 선불은 다음 사이클 · 다음 사이클 정책(kind = NEXT, 수업료). 계좌는 그 정책에서 복사
-5. 커밋 후 인공지능 초안 생성 · ‘정산 준비됨’ 알림은 비동기
+담당 · 호출 구조 (11/13 · 11/14 김강민 · 정홍준 합의)
+
+1. 정산 실행은 정홍준 담당이에요. 기록 저장(김강민)이 저장 트랜잭션 안에서 `settleIfReached`를 부르고, 결과를 응답 `settlement { settled, cycleId, reportId, invoiceId }`에 그대로 실어요. 호출하는 곳은 기록 저장 하나예요 (P0는 당일 취소 인정이 없어 휴강으로 회차가 늘지 않고, 기록 수정은 회차 수가 바뀌지 않음).
+2. 사이클 엔티티는 정홍준 담당이라 정산이 직접 잠그고 닫고 다음 사이클을 열어요. 회차 숫자(인정 회차 · 기간 · 휴강)와 리포트 생성은 김강민 담당이라 아래 인터페이스 2개로 불러요.
+3. 리포트를 먼저 만들고 청구에 reportId를 넣어요. 리포트는 청구 ID를 갖지 않고, 리포트 쪽은 `invoices.report_id`로 청구를 찾아요.
+4. 교육비 수정 API(`POST /invoices/{invoiceId}/adjustments`, 김강민)는 청구 엔티티의 `adjustAmount`를 써요.
+
+처리 순서와 규칙
+
+- `@Transactional(propagation = MANDATORY)`: 기록 저장 트랜잭션 밖에서 부르면 예외예요. 리포트 생성이나 청구 저장이 실패하면 예외를 잡지 않아 기록 저장까지 전부 롤백돼요.
+1. `TutoringRepository.findByIdForUpdate`로 **과외 행을 잠가요** (위 '사이클 구현 메모'의 진행 중 사이클 잠금). 과외가 없거나 삭제됐거나 ENDED면 `settled = false`.
+2. 진행 중 사이클 조회. 없으면 `settled = false`.
+3. 이 사이클 번호의 정책 = `TutoringPolicies.applicableTo(정책 목록, cycleNo)`. 없으면 `SETTLEMENT500_1` (데이터 오류).
+4. `CycleSessionReader.countRecognized` < 정책 정산 회차면 `settled = false`. 인정 회차가 더 많은 경우는 P0에서 생기지 않아요(정산 회차 축소는 P1). 생기면 경고 로그를 남기고 그대로 정산해요. P1에서는 넘치는 회차의 cycle_id를 새 사이클로 옮기고, 옮긴 수가 새 사이클 정산 회차 이상이면 반복해요.
+5. `cycle.settle(now)` → `Cycle.open(tutoring, cycleNo + 1, now)` 저장. 시각은 주입받은 `Clock`(Asia/Seoul) 기준이에요.
+6. `SettlementReportCreator.create(tutoringId, cycleId)` → reportId.
+7. 청구 생성 `Invoice.issue(policy, billedCycleId, reportId, kind, amount, snapshot)`. 계좌는 그 정책에서 복사해요.
+   - **후불**: kind = CURRENT, 청구 대상 = 이번 사이클, 이번 사이클 정책, **금액 = 수업료 그대로** (회차를 다 채웠으니까요. 인정 회차 × 회당 단가는 단가 버림 때문에 수업료보다 작을 수 있어요).
+   - **선불**: kind = NEXT, 청구 대상 = 새 사이클, **새 사이클 번호의 정책**(예약된 수업료 변경 반영), 금액 = 그 정책 수업료.
+   - 회차가 모자랄 때(수업 종료, UT 이후)만 인정 회차 × 회당 단가(`InvoiceAmountCalculator.shortfall`, 단가는 `Invoice.unitPriceOf`)예요. 수업 종료 청구는 아직 만들지 않아요.
+   - 선불 첫 사이클 청구(FIRST)는 정산이 만들지 않아요 (과외 만들기 담당, 아래 '선불 첫 청구').
+8. 결과 반환. 커밋 후 인공지능 초안 생성 · ‘정산 준비됨’ 알림은 비동기이고 아직 범위 밖이에요.
+
+스냅샷 (`InvoiceSnapshot.of(policy, recognizedCount, cycleStartDate, canceledLessons)`, 키는 위 '교육비 구현 메모' 표)
+
+| 키 | 후불 (CURRENT) | 선불 (NEXT) |
+| --- | --- | --- |
+| `recognizedCount` | 이번 사이클 인정 회차 | null |
+| `unitPrice` · `settlementSessionCount` · `paymentTiming` | 이번 사이클 정책 | 새 사이클 정책 |
+| `cycleStartDate` | `CycleSessionReader.period`의 시작일 | null (새 사이클은 아직 시작 전) |
+| `canceledLessons` | 이번 사이클 `canceledIn` | 방금 닫은 사이클 `canceledIn` |
+
+인터페이스 (`com.sudam.domain.settlement.port`, 구현은 김강민). 둘 다 정산 실행이 과외 행을 잠근 뒤 같은 트랜잭션에서 불러요 (새 트랜잭션을 열지 않음). 구현이 병합되기 전에는 `port.placeholder`의 임시 구현이 `UnsupportedOperationException`을 던지고, 구현이 병합되는 PR에서 이 패키지를 지워요.
+
+| 이름 | 메서드 | 계약 |
+| --- | --- | --- |
+| `CycleSessionReader` | `int countRecognized(Long tutoringId, Long cycleId)` | 그 사이클(cycle_id)의 is_recognized = TRUE 회차 수 = 기록 완료 + 인정 휴강. P0는 기록 완료 수. 없으면 0 |
+| | `CyclePeriod period(Long tutoringId, Long cycleId)` | 인정 회차 MIN ~ MAX(session_date). `CyclePeriod(LocalDate start, LocalDate end)` |
+| | `List<CanceledLesson> canceledIn(Long tutoringId, Long cycleId)` | 그 사이클 기간의 CANCELED 회차(인정 · 미인정 모두) 날짜순. `com.sudam.domain.invoice.entity.CanceledLesson`, cancelReason은 enum 이름 문자열. 없으면 빈 목록 |
+| `SettlementReportCreator` | `Long create(Long tutoringId, Long cycleId)` | 방금 SETTLED로 바꾼 사이클의 정산 리포트 행(통계 · 진도 표, ai_status = PENDING)을 만들고 id 반환. 청구 ID는 갖지 않음. 실패하면 예외 (잡지 않음) |
 
 **선불 첫 청구 (2.2.6)**: 과외 생성 때 사이클 1과 그 청구(kind = FIRST, report_id NULL)를 함께 만들어요. [이미 받았어요]면 입금 행을 넣고 PAID.
 

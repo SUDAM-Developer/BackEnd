@@ -51,19 +51,25 @@ com.sudam
 │   │   ├── enums/CycleStatus.java      # IN_PROGRESS, SETTLED
 │   │   ├── repository                  # CycleRepository: 진행 중 · 번호별 · 과외별 목록 조회
 │   │   └── exception                   # CycleException, code/CycleErrorCode (CYCLE409_1)
-│   └── invoice                         # 교육비 청구 · 입금 · 금액 수정 이력 (엔티티 · 레포지토리만)
-│       ├── entity                      # Invoice, InvoicePayment, InvoiceAmountAdjustment
-│       │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
-│       ├── enums                       # InvoiceKind, InvoiceStatus, AdjustedBy
-│       ├── repository                  # InvoiceRepository는 잠금 조회 findByIdForUpdate 제공
-│       └── exception                   # InvoiceException, code/InvoiceErrorCode
+│   ├── invoice                         # 교육비 청구 · 입금 · 금액 수정 이력 (엔티티 · 레포지토리만)
+│   │   ├── entity                      # Invoice, InvoicePayment, InvoiceAmountAdjustment
+│   │   │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
+│   │   ├── enums                       # InvoiceKind, InvoiceStatus, AdjustedBy
+│   │   ├── repository                  # InvoiceRepository는 잠금 조회 findByIdForUpdate 제공
+│   │   └── exception                   # InvoiceException, code/InvoiceErrorCode
+│   └── settlement                      # 정산 실행 (컨트롤러 없음. 기록 저장이 같은 트랜잭션에서 호출)
+│       ├── service                     # SettlementService.settleIfReached (MANDATORY), InvoiceAmountCalculator(순수 함수)
+│       ├── dto/SettlementResult        # 기록 저장 응답의 settlement { settled, cycleId, reportId, invoiceId }
+│       ├── port                        # 회차 · 리포트 담당(김강민)이 구현할 인터페이스: CycleSessionReader(+CyclePeriod), SettlementReportCreator
+│       │   └── placeholder             # 구현 병합 전 부팅용 임시 구현 (호출 시 UnsupportedOperationException). 구현 병합 PR에서 삭제
+│       └── exception                   # SettlementException, code/SettlementErrorCode (SETTLEMENT500_1)
 └── global                              # 공통 관심사
     ├── ApiResponse.java                # 모든 응답의 래퍼
     ├── exception                       # ProjectException, code/Base*Code · General*Code
     ├── handler/GeneralExceptionHandler # @RestControllerAdvice
     ├── entity/BaseTimeEntity.java      # createdAt / updatedAt 감사
     ├── crypto/AccountNumberConverter   # 계좌번호 AES-256-GCM JPA 변환기
-    ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig
+    ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig, ClockConfig(Asia/Seoul Clock 빈 — 서비스는 LocalDateTime.now(clock))
     └── security                        # 인증 인프라 (코드 enum은 domain/auth에 둔다)
         ├── filter/JwtAuthenticationFilter
         ├── token/TokenStore            # Redis — rt:{userId}, bl:{jti}
@@ -82,6 +88,7 @@ com.sudam
 | AUTH | 200_1 ~ 200_2 | 400_1, 401_1 ~ 401_6 |
 | USER | 200_1 ~ 200_4, 201_1 ~ 201_2 | 400_1 ~ 400_2, 404_1 ~ 404_2, 409_1 |
 | INVOICE | — | 404_1, 409_1 ~ 409_5 |
+| SETTLEMENT | — | 500_1 |
 
 ## 요청 처리 흐름
 
@@ -149,4 +156,4 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 - 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구, 쿠키 `secure` / `SameSite=None` 전환.
 - CORS — `SecurityConfig`에 설정 없음.
 - ERD의 생성 컬럼 + 유일 제약 — `ddl-auto`로 만들 수 없어 마이그레이션 도구 도입 전까지 서비스에서 보장한다.
-- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다.
+- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산 실행 서비스(`settlement`)만 있고, 회차 · 리포트 구현은 `port.placeholder` 임시 구현이다.
