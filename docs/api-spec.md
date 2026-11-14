@@ -1,7 +1,7 @@
 # API 명세
 
-> 최종 수정: 2026-11-13
-> 구현된 REST 엔드포인트는 인증 2개(토큰 재발급 · 로그아웃)와 사용자 6개(내 정보 · 약관 동의 · 프로필 등록/수정 · 설정 조회 · 회원 탈퇴)다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
+> 최종 수정: 2026-11-14
+> 구현된 REST 엔드포인트는 인증 2개(토큰 재발급 · 로그아웃), 사용자 6개(내 정보 · 약관 동의 · 프로필 등록/수정 · 설정 조회 · 회원 탈퇴), 교육비 2개(입금 현황 조회 · 입금 확인)다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
 > 작성 규칙은 `.claude/rules/api-convention.md`, 코드 체계는 `.claude/rules/error-code-convention.md`를 따른다.
 
 ## 공통
@@ -69,6 +69,13 @@
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
 
+**교육비 (`InvoiceSuccessCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
+| `INVOICE201_1` | 201 | 입금이 성공적으로 확인되었습니다. |
+
 ### 공통 에러 코드
 
 | code | HTTP | message |
@@ -111,7 +118,34 @@
 | `USER404_2` | 404 | 프로필이 등록되지 않았습니다. |
 | `USER409_1` | 409 | 이미 등록된 프로필입니다. |
 
+**교육비 (`InvoiceErrorCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `INVOICE404_1` | 404 | 교육비 안내를 찾을 수 없습니다. |
+| `INVOICE409_1` | 409 | 취소된 교육비 안내입니다. |
+| `INVOICE409_2` | 409 | 이미 받은 금액보다 적게 바꿀 수 없습니다. |
+| `INVOICE409_3` | 409 | 이미 입금 완료된 교육비입니다. |
+| `INVOICE409_4` | 409 | 이미 보낸 정산 리포트의 교육비는 바꿀 수 없습니다. |
+| `INVOICE409_5` | 409 | 입금 확인을 요청할 수 없는 상태입니다. |
+
+`INVOICE404_1`은 청구가 없을 때와 **다른 선생님의 과외 청구**일 때 모두 쓴다 (남의 청구가 있는지 드러내지 않는다). `INVOICE409_2` · `409_4` · `409_5`는 교육비 수정 · 학부모 [입금했어요] API에서 쓴다.
+
 <!-- TODO: 도메인이 추가되면 에러 코드 표를 도메인별로 덧붙인다. -->
+
+### 계산 값 이름
+
+교육비 금액은 응답마다 같은 이름 · 같은 뜻으로 쓴다. 수입 탭, 입금 확인, 정산 리포트 교육비 블록 등 새 응답에서 아래 값을 내려줄 때는 이 이름을 그대로 쓴다. 단위는 모두 원(정수)이다.
+
+| 이름 | 뜻 |
+| --- | --- |
+| `amount` | 최종 청구 금액. 자동 계산 금액에 교육비 수정을 반영한 값 (`invoices.amount`) |
+| `paidAmount` | 그 청구에 확인된 입금 중 되돌리지 않은(`canceled_at` 없음) 것의 합 |
+| `balance` | 남은 금액 = `amount` − `paidAmount`. 0보다 작아지지 않는다 |
+| `previousUnpaidAmount` | 같은 과외에서 이 청구보다 먼저 만든, 취소되지 않은 청구들의 `balance` 합 (미납 잔액, 6.1.2). 이번 `amount`에 더하지 않고 별도 줄로 보여준다 |
+| `unitPrice` | 회당 단가 = 수업료 ÷ 정산 회차, 원 미만 버림 (청구 스냅샷) |
+| `recognizedCount` | 청구에 반영한 인정 회차. 후불 · 수업 종료 청구에만 있고 선불은 `null` (청구 스냅샷) |
+| `settlementSessionCount` | 정산 회차 = 사이클 1번의 수업 횟수 (청구 스냅샷). 수입 탭 이름 '첫 · 다음 · 이번 N회차'의 N |
 
 ---
 
@@ -385,6 +419,149 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | 회원을 찾을 수 없음 | 404 | `USER404_1` |
 
 `provider_id`가 `NULL`이 되므로 같은 카카오 계정으로 다시 로그인하면 **새 회원으로 가입**된다. 카카오 연결 끊기(unlink)는 이번 범위에 없다.
+
+---
+
+## 교육비
+
+선생님 수입 탭 API다. 모두 인증이 필요하고 **내 과외**(`tutorings.teacher_id` = 로그인 사용자, 삭제되지 않음)의 청구만 다룬다. 금액 이름의 뜻은 공통 절 '계산 값 이름'을 따른다.
+
+### 입금 현황 조회
+
+| | |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/v1/invoices` |
+| 인증 | 필요 (선생님) |
+
+수입 탭 화면 전체를 한 번에 돌려준다. 페이징은 없다.
+
+**Request Query**
+
+| 필드 | 타입 | 필수 | 제약 | 설명 |
+| --- | --- | --- | --- | --- |
+| `month` | string | X | `YYYY-MM` (월 01~12) | 조회할 달. 없으면 한국 시간 이번 달 |
+
+**대상 청구** — 취소(CANCELED)를 뺀 내 과외 청구 중 아래 둘 중 하나. 종료된 과외도 포함한다.
+
+1. 안내일(`notified_at`, 없으면 `created_at`)이 그 달 `[1일 00:00, 다음 달 1일 00:00)` 안인 청구
+2. 안내일이 그 달 이전이고 `balance`가 남은 청구 (PENDING · PARTIAL · CONFIRM_REQUESTED)
+
+**정렬** — 확인 대기(CONFIRM_REQUESTED) → 입금 대기(PENDING) → 일부 입금(PARTIAL) → 입금 완료(PAID). 같은 상태는 안내일 최신순, 같으면 `invoiceId` 큰 순.
+
+**Response** (`200`, `INVOICE200_1`)
+
+```json
+{
+  "confirmRequestedCount": 1,
+  "unpaidCount": 2,
+  "summary": { "totalAmount": 720000, "paidAmount": 120000, "unpaidAmount": 600000 },
+  "items": [
+    {
+      "invoiceId": 12,
+      "tutoringId": 3,
+      "studentName": "서아",
+      "invoiceName": "이번 8회차",
+      "amount": 360000,
+      "paidAmount": 120000,
+      "balance": 240000,
+      "previousUnpaidAmount": 0,
+      "status": "PARTIAL",
+      "statusLine": { "type": "PARTIAL_PAID", "at": "2026-11-15T20:00:00" },
+      "reportId": 5,
+      "notifiedAt": "2026-11-10T19:02:11",
+      "createdAt": "2026-11-10T18:40:03"
+    }
+  ]
+}
+```
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `confirmRequestedCount` | number | items 중 CONFIRM_REQUESTED 건수 |
+| `unpaidCount` | number | items 중 PENDING · PARTIAL · CONFIRM_REQUESTED 건수 |
+| `summary.totalAmount` | number | items의 `amount` 합 |
+| `summary.paidAmount` | number | items의 `paidAmount` 합 |
+| `summary.unpaidAmount` | number | items의 `balance` 합 |
+| `items[].invoiceId` | number | 청구 ID |
+| `items[].tutoringId` | number | 과외 ID |
+| `items[].studentName` | string \| null | 학생 이름 (과외 삭제 시 파기돼 `null`) |
+| `items[].invoiceName` | string | FIRST `첫 N회차` / NEXT `다음 N회차` / CURRENT `이번 N회차` / FINAL `마지막 정산`. N = `settlementSessionCount` |
+| `items[].amount` · `paidAmount` · `balance` · `previousUnpaidAmount` | number | 계산 값 이름 참고 |
+| `items[].status` | string | `PENDING` / `CONFIRM_REQUESTED` / `PARTIAL` / `PAID` |
+| `items[].statusLine.type` | string | 아래 표 |
+| `items[].statusLine.at` | datetime \| null | 아래 표 |
+| `items[].reportId` | number \| null | 함께 보낸 정산 리포트 ID. 선불 첫 청구 등은 `null` |
+| `items[].notifiedAt` | datetime \| null | 교육비 안내 첫 발송 시각. 아직 안 보냈으면 `null` |
+| `items[].createdAt` | datetime | 청구 생성 시각 |
+
+건수와 `summary`는 따로 집계하지 않고 **items에서 더한다**. 화면의 합계와 목록이 항상 맞는다.
+
+**`statusLine`** — 위에서부터 먼저 맞는 하나. 저장하지 않고 계산한다.
+
+| 순서 | `type` | 조건 | `at` |
+| --- | --- | --- | --- |
+| 1 | `PARENT_CONFIRMED` | CONFIRM_REQUESTED (학부모가 [입금했어요]) | 요청 시각 (`confirm_requested_at`) |
+| 2 | `PARTIAL_PAID` | PARTIAL | 되돌리지 않은 입금 중 마지막 확인 시각 |
+| 3 | `NONE` | PAID — 다시 보냈거나 안내 전이어도 더 알릴 것이 없다 | `null` |
+| 4 | `RESENT` | `renotified_at` 있음 | 다시 보낸 시각 |
+| 5 | `REMINDER_SCHEDULED` | 과외 공유 설정의 미입금 알림 켜짐 + `reminder_sent_at` 없음 + PENDING | `null` |
+| 6 | `NOT_SENT` | `notified_at` 없음 | `null` |
+| 7 | `NONE` | 그 외 | `null` |
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `month` 형식 오류 (`2026-13`, `2026-1` 등). `result`는 `{ "month": "월은 YYYY-MM 형식이어야 합니다." }` | 400 | `COMMON400` |
+
+### 입금 확인
+
+| | |
+| --- | --- |
+| Method | `POST` |
+| Path | `/api/v1/invoices/{invoiceId}/payments` |
+| 인증 | 필요 (선생님) |
+
+선생님이 확인한 입금([전액 입금 완료] · 일부 입금, 6.3.1)을 기록한다. 한 트랜잭션에서 청구 행을 잠그고(SELECT … FOR UPDATE) 입금 행 추가와 상태 변경을 함께 한다. 합계가 `amount` 이상이면 PAID, 아니면 PARTIAL. 확인 대기(CONFIRM_REQUESTED)에서 입금해도 같은 규칙이다. 학부모에게 알림은 보내지 않는다.
+
+**Request Path**
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `invoiceId` | number | 청구 ID |
+
+**Request Body** (본문을 생략해도 된다)
+
+| 필드 | 타입 | 필수 | 제약 | 설명 |
+| --- | --- | --- | --- | --- |
+| `amount` | number | X | 1 이상 | 확인한 금액. 없으면 `balance` 전부, `balance`보다 크면 `balance`까지만 반영 |
+| `confirmedAt` | datetime | X | `yyyy-MM-ddTHH:mm:ss` (한국 시간) | 입금 확인 시각 (수입 탭 월별 합계 기준). 없으면 요청 시각 |
+
+```json
+{ "amount": 120000, "confirmedAt": "2026-11-15T20:00:00" }
+```
+
+`Idempotency-Key` 헤더는 아직 받지 않는다. 같은 요청을 두 번 보내면 입금이 두 번 기록된다(잔액을 넘지는 않는다).
+
+**Response** (`201`, `INVOICE201_1`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `paymentId` | number | 새 입금 행 ID |
+| `appliedAmount` | number | 실제로 반영한 금액 |
+| `item` | object | 반영 후의 교육비 한 줄. 입금 현황 조회의 `items[]`와 같은 형식 · 같은 변환 |
+
+예: 360,000원 청구에 `{ "amount": 120000 }` → `appliedAmount` 120000, `item.status` PARTIAL, `item.statusLine.type` PARTIAL_PAID, `item.balance` 240000. 이어서 `{ "amount": 300000 }` → `appliedAmount` 240000, `item.status` PAID.
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `amount`가 0 이하, 깨진 JSON. 검증 실패면 `result`는 `{ "amount": "입금 금액은 1원 이상이어야 합니다." }` | 400 | `COMMON400` |
+| 청구가 없음, 다른 선생님 과외의 청구, 삭제된 과외의 청구 | 404 | `INVOICE404_1` |
+| 취소된 청구 | 409 | `INVOICE409_1` |
+| 이미 입금 완료 (`balance` 0) | 409 | `INVOICE409_3` |
 
 ---
 
