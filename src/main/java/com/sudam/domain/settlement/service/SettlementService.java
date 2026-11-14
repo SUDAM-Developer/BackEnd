@@ -3,7 +3,6 @@ package com.sudam.domain.settlement.service;
 import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import com.sudam.domain.cycle.repository.CycleRepository;
-import com.sudam.domain.invoice.entity.CanceledLesson;
 import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.entity.InvoiceSnapshot;
 import com.sudam.domain.invoice.enums.InvoiceKind;
@@ -107,7 +106,7 @@ public class SettlementService {
         //    후불은 방금 닫은 사이클을, 선불은 방금 연 다음 사이클을 청구한다.
         Invoice invoice = policy.getPaymentTiming() == PaymentTiming.POSTPAID
                 ? postpaidInvoice(tutoringId, cycle, policy, recognized, reportId)
-                : prepaidInvoice(tutoringId, cycle, next, policies, reportId);
+                : prepaidInvoice(tutoringId, cycle, recognized, next, policies, reportId);
         Invoice saved = invoiceRepository.save(invoice);
 
         // 8. 결과 반환: 기록 저장 응답의 settlement에 그대로 실린다.
@@ -126,13 +125,18 @@ public class SettlementService {
         return Invoice.issue(policy, cycle.getId(), reportId, InvoiceKind.CURRENT, policy.getTuitionFee(), snapshot);
     }
 
-    // 선불: 새 사이클 · 새 사이클 번호의 정책(예약된 수업료 변경 반영). 새 사이클은 아직 시작 전이라 인정 회차 · 시작일이 없고,
-    // 휴강 내역은 방금 닫은 사이클 것을 보여준다.
-    private Invoice prepaidInvoice(Long tutoringId, Cycle closed, Cycle next, List<TutoringPolicy> policies,
-                                   Long reportId) {
+    // 선불: 새 사이클 · 새 사이클 번호의 정책(예약된 수업료 변경 반영)으로 청구한다.
+    // 스냅샷의 인정 회차 · 시작일 · 휴강은 리포트 교육비 블록('8회차 · 선불 · 9월 14일 사이클')이 보여주는 방금 닫은 사이클 값이고,
+    // 단가 · 정산 회차 · 선불/후불만 새 사이클 정책을 따른다.
+    private Invoice prepaidInvoice(Long tutoringId, Cycle closed, int recognized, Cycle next,
+                                   List<TutoringPolicy> policies, Long reportId) {
         TutoringPolicy nextPolicy = policyFor(policies, next.getCycleNo());
-        List<CanceledLesson> canceled = cycleSessionReader.canceledIn(tutoringId, closed.getId());
-        InvoiceSnapshot snapshot = InvoiceSnapshot.of(nextPolicy, null, null, canceled);
+        InvoiceSnapshot snapshot = InvoiceSnapshot.of(
+                nextPolicy,
+                recognized,
+                cycleSessionReader.period(tutoringId, closed.getId()).start(),
+                cycleSessionReader.canceledIn(tutoringId, closed.getId())
+        );
         return Invoice.issue(nextPolicy, next.getId(), reportId, InvoiceKind.NEXT, nextPolicy.getTuitionFee(),
                 snapshot);
     }

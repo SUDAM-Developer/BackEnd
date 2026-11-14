@@ -827,11 +827,11 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 | 키 | 타입 | 설명 |
 | --- | --- | --- |
-| `recognizedCount` | 숫자 \| null | 인정 회차. 선불이면 null |
+| `recognizedCount` | 숫자 \| null | 인정 회차. 정산한 사이클 기준. 정산 없이 만든 청구(선불 첫 청구 FIRST)는 null |
 | `unitPrice` | 숫자 | 회당 단가 (수업료 ÷ 정산 회차, 원 미만 버림) |
 | `settlementSessionCount` | 숫자 | 정산 회차 |
 | `paymentTiming` | `PREPAID` \| `POSTPAID` | 선불 / 후불 |
-| `cycleStartDate` | `yyyy-MM-dd` \| null | 청구 대상 사이클 시작일. 아직 시작 전이면 null |
+| `cycleStartDate` | `yyyy-MM-dd` \| null | 사이클 시작일. 정산한 사이클 기준. 정산 없이 만든 청구(선불 첫 청구 FIRST)는 null |
 | `canceledLessons` | 배열 | 휴강 내역. 각 항목 `date`(`yyyy-MM-dd`), `cancelReason`(sessions.cancel_reason의 enum 이름). 없으면 `[]` |
 
 - 상태 변경은 엔티티 메서드로만 해요. 모두 `InvoiceRepository.findByIdForUpdate`로 청구 행을 잠근 뒤 호출해요.
@@ -880,9 +880,9 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 | 키 | 후불 (CURRENT) | 선불 (NEXT) |
 | --- | --- | --- |
-| `recognizedCount` | 이번 사이클 인정 회차 | null |
+| `recognizedCount` | 이번 사이클 인정 회차 | 방금 닫은(정산한) 사이클 인정 회차 |
 | `unitPrice` · `settlementSessionCount` · `paymentTiming` | 이번 사이클 정책 | 새 사이클 정책 |
-| `cycleStartDate` | `CycleSessionReader.period`의 시작일 | null (새 사이클은 아직 시작 전) |
+| `cycleStartDate` | `CycleSessionReader.period`의 시작일 | 방금 닫은 사이클 `CycleSessionReader.period`의 시작일 |
 | `canceledLessons` | 이번 사이클 `canceledIn` | 방금 닫은 사이클 `canceledIn` |
 
 인터페이스 (`com.sudam.domain.settlement.port`, 구현은 김강민). 둘 다 정산 실행이 과외 행을 잠근 뒤 같은 트랜잭션에서 불러요 (새 트랜잭션을 열지 않음). 구현은 `CycleSessionReader` → `session.service.SessionCycleReader`, `SettlementReportCreator` → `report.service.SettlementReportFactory`이고 둘 다 `MANDATORY` 트랜잭션이에요. 임시 구현(`port.placeholder`)은 #27에서 지웠어요.
