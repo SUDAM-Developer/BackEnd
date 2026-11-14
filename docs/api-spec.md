@@ -1,7 +1,7 @@
 # API 명세
 
-> 최종 수정: 2026-11-12
-> 구현된 REST 엔드포인트는 토큰 재발급 · 로그아웃 · 회원 탈퇴 세 개다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
+> 최종 수정: 2026-11-13
+> 구현된 REST 엔드포인트는 인증 2개(토큰 재발급 · 로그아웃)와 사용자 6개(내 정보 · 약관 동의 · 프로필 등록/수정 · 설정 조회 · 회원 탈퇴)다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
 > 작성 규칙은 `.claude/rules/api-convention.md`, 코드 체계는 `.claude/rules/error-code-convention.md`를 따른다.
 
 ## 공통
@@ -63,6 +63,11 @@
 | code | HTTP | message |
 | --- | --- | --- |
 | `USER200_1` | 200 | 회원 탈퇴가 완료되었습니다. |
+| `USER200_2` | 200 | 사용자 정보가 조회되었습니다. |
+| `USER200_3` | 200 | 설정 정보가 조회되었습니다. |
+| `USER200_4` | 200 | 프로필이 수정되었습니다. |
+| `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
+| `USER201_2` | 201 | 프로필이 등록되었습니다. |
 
 ### 공통 에러 코드
 
@@ -100,7 +105,11 @@
 
 | code | HTTP | message |
 | --- | --- | --- |
+| `USER400_1` | 400 | 필수 약관에 모두 동의해야 합니다. |
+| `USER400_2` | 400 | 기타 과목명을 입력해 주세요. |
 | `USER404_1` | 404 | 해당 회원을 찾을 수 없습니다. |
+| `USER404_2` | 404 | 프로필이 등록되지 않았습니다. |
+| `USER409_1` | 409 | 이미 등록된 프로필입니다. |
 
 <!-- TODO: 도메인이 추가되면 에러 코드 표를 도메인별로 덧붙인다. -->
 
@@ -196,6 +205,165 @@ RT를 Redis에서 지우고, 요청에 쓰인 AT를 남은 만료 시간만큼 �
 
 AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. 같은 AT로 두 번 호출하면 두 번째는 `AUTH401_4`다.
 
+---
+
+## 사용자
+
+모두 인증이 필요하고 본인(`/me`) 자원만 다룬다. 회원은 가입 직후 **약관 동의 → 프로필 등록** 순으로 온보딩을 마쳐야 하며, 진행 상태는 `GET /users/me`의 `status`로 알 수 있다.
+
+### 내 정보 조회
+
+| | |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/v1/users/me` |
+| 인증 | 필요 |
+
+**Response** (`200`, `USER200_2`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `role` | string | `TEACHER` (현재 고정) |
+| `name` | string \| null | 프로필 이름. 프로필이 없으면 `null` |
+| `status` | string | `TERMS_REQUIRED` / `PROFILE_REQUIRED` / `ACTIVE` |
+
+`status`는 저장하지 않고 계산한다. 현재 시행 중인 **필수** 약관 전부에 동의 행이 없으면 `TERMS_REQUIRED`, 동의는 됐지만 프로필이 없으면 `PROFILE_REQUIRED`, 둘 다 있으면 `ACTIVE`. 새 버전 약관이 시행되면 그 버전에 다시 동의할 때까지 `TERMS_REQUIRED`로 돌아간다.
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 회원을 찾을 수 없음 | 404 | `USER404_1` |
+
+### 약관 동의
+
+| | |
+| --- | --- |
+| Method | `POST` |
+| Path | `/api/v1/users/me/terms-agreements` |
+| 인증 | 필요 |
+
+코드별로 현재 시행 중인 최신 버전 약관에 동의한 것으로 기록한다. 약관 행(`terms`)은 코드에서 만들지 않고 `data.sql` 시드로 넣는다 (`SERVICE` / `PRIVACY` / `CONTACT`, 모두 필수).
+
+**Request Body**
+
+| 필드 | 타입 | 필수 | 제약 | 설명 |
+| --- | --- | --- | --- | --- |
+| `termsCodes` | string[] | O | 1개 이상, `SERVICE` / `PRIVACY` / `CONTACT` | 동의한 약관 코드. 중복은 무시한다 |
+
+**Response** (`201`, `USER201_1`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `agreements[].code` | string | 약관 코드 |
+| `agreements[].agreedAt` | datetime | 동의 시각 |
+
+멱등이다. 이미 같은 버전에 동의한 코드는 행을 새로 만들지 않고 기존 `agreedAt`을 그대로 돌려준다.
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `termsCodes`가 비어 있음, 알 수 없는 코드 | 400 | `COMMON400` |
+| 현재 시행 중인 필수 약관이 하나라도 빠짐 (저장 전 검사라 부분 저장 없음) | 400 | `USER400_1` |
+| 회원을 찾을 수 없음 | 404 | `USER404_1` |
+
+### 프로필 등록
+
+| | |
+| --- | --- |
+| Method | `POST` |
+| Path | `/api/v1/users/me/profile` |
+| 인증 | 필요 |
+
+**Request Body** (프로필 수정과 같은 형식)
+
+| 필드 | 타입 | 필수 | 제약 | 설명 |
+| --- | --- | --- | --- | --- |
+| `name` | string | O | 2~10자 | 이름 |
+| `subjects` | string[] | O | 1개 이상, `ENGLISH` / `MATH` / `KOREAN` / `SCIENCE` / `SOCIAL` / `OTHER` | 과목. 중복은 무시한다 |
+| `subjectOther` | string | `OTHER` 포함 시 O | 20자 이내 | 기타 과목명. `OTHER`가 없으면 값이 있어도 버린다 |
+
+**Response** (`201`, `USER201_2`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `createdAt` | datetime | 등록 시각 |
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 이름 길이, 빈 과목 목록, 알 수 없는 과목, 기타 과목명 20자 초과 | 400 | `COMMON400` |
+| `OTHER`를 골랐는데 `subjectOther`가 비어 있음 | 400 | `USER400_2` |
+| 회원을 찾을 수 없음 | 404 | `USER404_1` |
+| 이미 프로필이 있음 | 409 | `USER409_1` |
+
+약관 동의 여부는 검사하지 않는다 (온보딩 순서는 프론트가 `status`로 안내한다).
+
+### 프로필 수정
+
+| | |
+| --- | --- |
+| Method | `PUT` |
+| Path | `/api/v1/users/me/profile` |
+| 인증 | 필요 |
+
+이름 · 과목 · 기타 과목명을 **전체 교체**한다. 부분 수정은 없다.
+
+**Request Body** — 프로필 등록과 같다.
+
+**Response** (`200`, `USER200_4`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `updatedAt` | datetime | 수정 시각 |
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 요청 검증 실패 | 400 | `COMMON400` |
+| `OTHER`를 골랐는데 `subjectOther`가 비어 있음 | 400 | `USER400_2` |
+| 프로필이 없음 | 404 | `USER404_2` |
+
+### 설정 조회
+
+| | |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/v1/users/me/settings` |
+| 인증 | 필요 |
+
+설정 화면 한 번에 필요한 정보를 묶어 돌려준다. **`profile` · `account`만 DB 값**이고 나머지 묶음은 해당 도메인(소개서 · 결제 · 알림)이 생기기 전까지 고정 기본값이다.
+
+**Response** (`200`, `USER200_3`)
+
+```json
+{
+  "profile": { "name": "한서윤", "subjects": [ { "code": "ENGLISH", "name": "영어" }, { "code": "OTHER", "name": "논술" } ] },
+  "account": { "provider": "KAKAO" },
+  "intro": { "status": "NONE", "unlockedAt": null },
+  "curriculumPass": { "availableCount": 0, "nearestExpiresAt": null, "hasPendingRequest": false },
+  "subscription": { "status": "NONE", "nextBillingOn": null, "hasPendingRequest": false },
+  "notification": { "sentCount": 0, "pushEnabled": false }
+}
+```
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `profile.name` | string | 이름 |
+| `profile.subjects[].code` | string | 과목 코드 |
+| `profile.subjects[].name` | string | 표시명. `OTHER`는 enum 한글명(`기타`) 대신 `subjectOther` 값 |
+| `account.provider` | string | 로그인 수단 (`KAKAO`) |
+| `intro` · `curriculumPass` · `subscription` · `notification` | object | 고정 기본값 (위 예시 그대로) |
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 프로필이 없음 | 404 | `USER404_2` |
+
 ### 회원 탈퇴
 
 | | |
@@ -204,7 +372,7 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | Path | `/api/v1/users/me` |
 | 인증 | 필요 |
 
-본인 계정을 논리 삭제하고 개인정보를 파기한다. `users.withdrawn_at`을 채우고 `email`·`provider_id`를 `NULL`로 만든다 (ERD 1.2.3). 토큰 처리는 로그아웃과 같다.
+본인 계정을 논리 삭제하고 개인정보를 파기한다. `users.withdrawn_at`을 채우고 `email`·`provider_id`를 `NULL`로 만든다 (ERD 1.2.3). 토큰 처리는 로그아웃(인증 절)과 같다.
 
 **Request** — 본문 없음. `Authorization: Bearer {AT}`
 
