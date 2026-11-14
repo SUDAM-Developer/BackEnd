@@ -1,6 +1,6 @@
 # ERD
 
-> 최종 수정: 2026-11-13
+> 최종 수정: 2026-11-14
 > 작성 규칙은 `.claude/rules/jpa-convention.md`를 따른다.
 
 - 기준: SUDAM 기능명세서 11-01 ver, 결제 방식 10/31 최종 정리. 괄호 속 숫자(예: 2.2.4)는 기능명세서 번호
@@ -520,6 +520,17 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | `started_at` | DATETIME | NOT NULL | 사이클이 열린 시각 |
 | `settled_at` | DATETIME | NULL | 정산 실행 시각 |
 - 제약: UNIQUE(tutoring_id, cycle_no), UNIQUE(tutoring_id, in_progress_key). 정산 실행이 두 번 동시에 돌아도 진행 중 사이클이 두 개 생기지 않아요. 기간은 인정 회차 MIN(session_date) ~ MAX(session_date)로 계산해요.
+
+#### 사이클 구현 메모 (팀 결정, 위 표보다 우선)
+
+엔티티: `com.sudam.domain.cycle.entity.Cycle`. 담당: 정홍준 (11/14 변경).
+
+- `tutoring_id`는 `@ManyToOne(LAZY)` 연관관계예요. `status`는 `CycleStatus`(IN_PROGRESS · SETTLED)를 `@Enumerated(STRING)`으로 저장해요. UNSIGNED는 붙이지 않았어요 (과외 · 참여자 · 교육비 도메인과 같음).
+- 제약은 UNIQUE(tutoring_id, cycle_no)(`uk_cycles_tutoring_cycle_no`)만 만들어요.
+- `in_progress_key` 생성 열과 UNIQUE(tutoring_id, in_progress_key)는 `ddl-auto`로 만들어지지 않아 두지 않았어요. 대신 **과외 행 잠금**으로 '진행 중 사이클은 과외당 1개'를 지켜요: 사이클을 열고 닫는 모든 쪽 — 과외 만들기(사이클 1) · 정산 실행 · 수업 종료 · 수업료 변경 — 은 같은 트랜잭션에서 먼저 `TutoringRepository.findByIdForUpdate`(SELECT … FOR UPDATE)로 과외 행을 잠근 뒤 진행 중 사이클을 조회 · 변경해요. 아래 '정산 실행'의 '진행 중 사이클을 잠그고'도 이 과외 행 잠금으로 구현해요.
+- 메서드: `Cycle.open(tutoring, cycleNo, startedAt)` → IN_PROGRESS, `settle(settledAt)` → SETTLED (이미 정산됐으면 `CYCLE409_1`), `isInProgress()`.
+- 레포지토리 `CycleRepository`: `findByTutoringIdAndStatus`(진행 중 사이클은 IN_PROGRESS로 조회), `findByTutoringIdAndCycleNo`, `findAllByTutoringIdOrderByCycleNo`.
+- 회차(`sessions.cycle_id`)는 이 엔티티를 `@ManyToOne(LAZY)`로 참조해요. 교육비의 `billed_cycle_id`는 아직 숫자 열이에요(교육비 구현 메모).
 
 ### sessions (수업 회차)
 

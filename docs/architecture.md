@@ -1,6 +1,6 @@
 # 아키텍처
 
-> 최종 수정: 2026-11-13
+> 최종 수정: 2026-11-14
 > 전체 구조와 요청 처리 흐름. 세부 규칙은 `.claude/rules/`의 각 파일에 있다.
 
 ## 기술 스택
@@ -34,6 +34,11 @@ com.sudam
 │   │       └── code
 │   │           ├── AuthErrorCode.java    # AUTH400_1, AUTH401_1 ~ AUTH401_6
 │   │           └── AuthSuccessCode.java  # AUTH200_1
+│   ├── cycle                       # 수업 도메인 중 수업 사이클 (정산 단위 묶음)
+│   │   ├── entity/Cycle.java       # open / settle / isInProgress
+│   │   ├── enums/CycleStatus.java  # IN_PROGRESS, SETTLED
+│   │   ├── repository/CycleRepository.java  # 진행 중 · 번호별 · 과외별 목록 조회 (변경 전 과외 행 잠금 필수)
+│   │   └── exception               # CycleException + code/CycleErrorCode (CYCLE409_1)
 │   ├── invoice                     # 정산 도메인 중 교육비 청구 · 입금 · 금액 수정 이력
 │   │   ├── entity                  # Invoice, InvoicePayment, InvoiceAmountAdjustment
 │   │   │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
@@ -48,7 +53,7 @@ com.sudam
 │   │   ├── entity                  # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
 │   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책을 고르는 순수 함수
 │   │   ├── enums                   # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
-│   │   └── repository              # 엔티티별 JpaRepository (정책은 과외별 목록 조회만)
+│   │   └── repository              # 엔티티별 JpaRepository (정책은 과외별 목록 조회만, TutoringRepository.findByIdForUpdate = 사이클 잠금 기준)
 │   └── user
 │       ├── entity/User.java
 │       ├── enums                   # Role(TEACHER, PARENT, STUDENT), Provider(KAKAO)
