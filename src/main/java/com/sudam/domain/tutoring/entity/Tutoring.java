@@ -1,15 +1,20 @@
 package com.sudam.domain.tutoring.entity;
 
 import com.sudam.domain.tutoring.enums.TutoringStatus;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.enums.Subject;
 import com.sudam.global.entity.BaseTimeEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -37,15 +42,17 @@ public class Tutoring extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 선생님 = users.id. teacher_profiles가 아직 없어 연관관계 없이 숫자로만 둔다 (팀 결정).
-    @Column(nullable = false)
-    private Long teacherId;
+    // 선생님 프로필. teacher_profiles의 PK가 users.id라 teacher_id 값은 그대로 users.id다.
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "teacher_id", nullable = false)
+    private TeacherProfile teacher;
 
-    // subjects는 프로필 작업에서 만든다. 그 전까지 연관관계 없이 숫자로만 둔다 (팀 결정). 과목 '기타'면 NULL.
-    @JdbcTypeCode(SqlTypes.SMALLINT)
-    private Short subjectId;
+    // 과목 코드. 프로필과 같은 Subject enum을 쓰고 테이블 없이 enum 이름으로 저장한다 (ERD 공통 규칙).
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Subject subject;
 
-    // 과목 '기타' 직접 입력. 이때 subjectId는 NULL (앱 검증).
+    // 과목 '기타' 직접 입력 1~10자. subject = OTHER일 때만 값이 있다 (앱 검증).
     @Column(length = 10)
     private String subjectOther;
 
@@ -77,10 +84,10 @@ public class Tutoring extends BaseTimeEntity {
     private LocalDateTime deletedAt;
 
     @Builder
-    private Tutoring(Long teacherId, Short subjectId, String subjectOther, String studentName,
+    private Tutoring(TeacherProfile teacher, Subject subject, String subjectOther, String studentName,
                      Integer gradeLevel, String gradeOther, Integer gradeSchoolYear) {
-        this.teacherId = teacherId;
-        this.subjectId = subjectId;
+        this.teacher = teacher;
+        this.subject = subject;
         this.subjectOther = subjectOther;
         this.studentName = studentName;
         this.gradeLevel = gradeLevel;

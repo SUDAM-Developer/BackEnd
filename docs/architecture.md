@@ -22,7 +22,7 @@ com.sudam
 │   ├── user                            # 회원 · 온보딩(약관 동의 → 프로필) · 설정 · 탈퇴
 │   │   ├── controller / service
 │   │   ├── entity                      # User, Terms(시드 전용), UserTermsAgreement, TeacherProfile(PK = users.id)
-│   │   ├── enums                       # Role, Provider, Subject, TermsCode, UserStatus
+│   │   ├── enums                       # Role, Provider, Subject(과외도 공유), TermsCode, UserStatus
 │   │   ├── repository                  # 엔티티별 JpaRepository
 │   │   ├── dto                         # request/AgreeTermsRequest · SaveProfileRequest, response/*
 │   │   └── exception                   # UserException, code/UserErrorCode · UserSuccessCode
@@ -35,6 +35,17 @@ com.sudam
 │   │   ├── entity/Participant.java
 │   │   ├── enums                       # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
 │   │   └── repository
+│   ├── session                         # 수업 회차 (엔티티 · 레포지토리만)
+│   │   ├── entity/Session.java         # completeRegular = 정규 회차 기록
+│   │   ├── enums                       # SessionType, SessionStatus
+│   │   └── repository                  # 일정 · 날짜 중복 확인, 사이클의 인정 회차 정렬 조회
+│   ├── record                          # 수업 기록 · 회차 진도
+│   │   ├── controller / service        # POST /api/v1/tutorings/{tutoringId}/records
+│   │   ├── entity                      # SessionRecord, SessionProgress (둘 다 회차를 가리킴)
+│   │   ├── enums                       # Understanding, HomeworkResult
+│   │   ├── repository
+│   │   ├── dto                         # request/SaveRecordRequest, response/SaveRecordResponse
+│   │   └── exception                   # RecordException, code/RecordErrorCode · RecordSuccessCode
 │   ├── cycle                           # 수업 사이클 = 정산 단위 묶음 (엔티티 · 레포지토리만)
 │   │   ├── entity/Cycle.java           # open / settle / isInProgress
 │   │   ├── enums/CycleStatus.java      # IN_PROGRESS, SETTLED
