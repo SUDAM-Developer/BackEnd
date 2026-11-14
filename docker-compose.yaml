@@ -1,0 +1,45 @@
+name: sudam-app
+
+services:
+  # Spring Boot 애플리케이션 (DB는 외부 RDS를 사용하므로 컨테이너로 띄우지 않음)
+  spring-app:
+    # CD(dev-deploy.yaml)가 전달하는 IMAGE_NAME / IMAGE_TAG 로 교체됨
+    image: ${IMAGE_NAME}:${IMAGE_TAG}
+    container_name: spring-app
+    # .env.example의 키(DB_*, KAKAO_*, JWT_SECRET, ACCOUNT_ENCRYPTION_KEY, APP_BASE_URL, FRONT_BASE_URL)를 주입
+    env_file:
+      - .env
+    environment:
+      # application-dev.yaml 적용 (ddl-auto: update, Redis 호스트, 도메인 기준 리다이렉트 URI)
+      SPRING_PROFILES_ACTIVE: dev
+      TZ: Asia/Seoul
+    # Nginx만 접근하도록 호스트의 루프백에만 연다 (외부에서 8080 직접 접근 불가)
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # 리프레시 토큰(rt:{userId}) · 액세스 토큰 차단 목록(bl:{jti}) 저장소. 외부 노출 없이 내부 네트워크로만 접근
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    # 재시작해도 로그인 세션이 유지되도록 AOF로 디스크에 남긴다
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis-data:
