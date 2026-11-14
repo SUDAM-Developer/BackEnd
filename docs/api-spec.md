@@ -1,7 +1,7 @@
 # API 명세
 
-> 최종 수정: 2026-11-13
-> 구현된 REST 엔드포인트는 인증 2개(토큰 재발급 · 로그아웃)와 사용자 6개(내 정보 · 약관 동의 · 프로필 등록/수정 · 설정 조회 · 회원 탈퇴)다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
+> 최종 수정: 2026-11-14
+> 구현된 REST 엔드포인트는 인증 2개(토큰 재발급 · 로그아웃), 사용자 6개(내 정보 · 약관 동의 · 프로필 등록/수정 · 설정 조회 · 회원 탈퇴), 수업 기록 1개(저장)다. 카카오 로그인은 Spring Security OAuth2 Client가 제공하는 경로를 그대로 쓴다.
 > 작성 규칙은 `.claude/rules/api-convention.md`, 코드 체계는 `.claude/rules/error-code-convention.md`를 따른다.
 
 ## 공통
@@ -69,6 +69,12 @@
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
 
+**수업 기록 (`RecordSuccessCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
+
 ### 공통 에러 코드
 
 | code | HTTP | message |
@@ -110,6 +116,19 @@
 | `USER404_1` | 404 | 해당 회원을 찾을 수 없습니다. |
 | `USER404_2` | 404 | 프로필이 등록되지 않았습니다. |
 | `USER409_1` | 409 | 이미 등록된 프로필입니다. |
+
+**수업 기록 (`RecordErrorCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `RECORD400_1` | 400 | 수업 일정에 없는 날짜입니다. |
+| `RECORD400_2` | 400 | 아직 하지 않은 수업은 기록할 수 없습니다. |
+| `RECORD400_3` | 400 | 끝 진도는 시작 진도보다 앞설 수 없습니다. |
+| `RECORD404_1` | 404 | 과외를 찾을 수 없습니다. |
+| `RECORD404_2` | 404 | 수업 일정을 찾을 수 없습니다. |
+| `RECORD404_3` | 404 | 교재를 찾을 수 없습니다. |
+| `RECORD409_1` | 409 | 이미 기록한 수업입니다. |
+| `RECORD409_2` | 409 | 진행 중인 수업 사이클이 없습니다. |
 
 <!-- TODO: 도메인이 추가되면 에러 코드 표를 도메인별로 덧붙인다. -->
 
@@ -385,6 +404,89 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | 회원을 찾을 수 없음 | 404 | `USER404_1` |
 
 `provider_id`가 `NULL`이 되므로 같은 카카오 계정으로 다시 로그인하면 **새 회원으로 가입**된다. 카카오 연결 끊기(unlink)는 이번 범위에 없다.
+
+---
+
+## 수업 기록
+
+### 수업 기록 저장
+
+| | |
+| --- | --- |
+| Method | `POST` |
+| Path | `/api/v1/tutorings/{tutoringId}/records` |
+| 인증 | 필요 (본인 과외만) |
+
+반복 일정의 수업 한 회차를 기록한다. 회차(`sessions`) · 기록(`session_records`) · 진도(`session_progress`) 행을 함께 만든다.
+정산은 하지 않으므로 `settlement`는 항상 정산 전 값이다. 보강 · 추가 회차 기록은 아직 없다.
+
+**Request Body**
+
+| 필드 | 타입 | 필수 | 제약 | 설명 |
+| --- | --- | --- | --- | --- |
+| `scheduleId` | number | O | 이 과외의 반복 일정 | 기록할 회차의 일정 |
+| `originalDate` | string | O | `yyyy-MM-dd`, 일정의 요일 · 적용 기간 안, 오늘 이전(오늘 포함) | 반복 일정상 수업 날짜 |
+| `progress` | array | O | 1~5개, `textbookId` 중복 불가 | 교재별 진도. [안 함] 교재는 넣지 않는다 |
+| `progress[].textbookId` | number | O | 이 과외의 교재 | 교재 ID |
+| `progress[].startPosition` | number | O | 0 이상 | 이번 수업 시작 진도 |
+| `progress[].endPosition` | number | O | `startPosition` 이상 | 이번 수업 끝 진도 |
+| `understanding` | string | O | `HIGH` / `MEDIUM` / `LOW` | 이해도 |
+| `previousHomeworkResult` | string | X | `DONE` / `PARTIAL` / `NOT_DONE` | 지난 숙제. 첫 회차 · 지난 숙제 없으면 null |
+| `nextHomework` | string | X | 100자 이내 | 다음 숙제 |
+| `observationMemo` | string | X | 100자 이내 | 관찰 한 줄 |
+
+```json
+{
+  "scheduleId": 31,
+  "originalDate": "2026-09-30",
+  "progress": [
+    { "textbookId": 11, "startPosition": 7, "endPosition": 7 },
+    { "textbookId": 12, "startPosition": 18, "endPosition": 18 }
+  ],
+  "understanding": "HIGH",
+  "previousHomeworkResult": "DONE",
+  "nextHomework": "7강 예습",
+  "observationMemo": null
+}
+```
+
+**Response** (`201`, `RECORD201_1`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `sessionId` | number | 이번 기록으로 만든 회차 ID |
+| `noInCycle` | number | 사이클 안에서 몇 번째 인정 회차인지 (1부터). 지난 수업을 늦게 기록하면 마지막 번호가 아닐 수 있다 |
+| `cycle.cycleNo` | number | 진행 중 사이클 번호 |
+| `cycle.recognizedCount` | number | 사이클의 인정 회차 수 (이번 기록 포함) |
+| `cycle.settlementSessionCount` | number | 사이클에 적용되는 정책의 정산 회차 |
+| `settlement.settled` | boolean | 정산 실행 여부. 정산 기능 전까지 항상 `false` |
+| `settlement.cycleId` / `reportId` / `invoiceId` | number \| null | 정산 결과 ID. 정산 기능 전까지 항상 `null` |
+
+```json
+{
+  "sessionId": 1198,
+  "noInCycle": 7,
+  "cycle": { "cycleNo": 1, "recognizedCount": 7, "settlementSessionCount": 8 },
+  "settlement": { "settled": false, "cycleId": null, "reportId": null, "invoiceId": null }
+}
+```
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 필수값 누락, 교재 개수 · 중복, 100자 초과, 음수 진도 | 400 | `COMMON400` (`result`에 필드별 메시지) |
+| 날짜 형식 오류, 알 수 없는 enum 값 | 400 | `COMMON400` (`result`는 `null`) |
+| 일정의 요일 · 적용 기간과 맞지 않는 날짜 | 400 | `RECORD400_1` |
+| 오늘보다 뒤의 날짜 | 400 | `RECORD400_2` |
+| 시작 진도가 끝 진도보다 큼 | 400 | `RECORD400_3` |
+| 과외가 없거나 삭제됐거나 다른 선생님의 과외 | 404 | `RECORD404_1` |
+| 일정이 없거나 이 과외의 일정이 아님 | 404 | `RECORD404_2` |
+| 교재가 없거나 이 과외의 교재가 아님 | 404 | `RECORD404_3` |
+| 같은 일정 · 같은 날짜의 회차를 이미 기록함 | 409 | `RECORD409_1` |
+| 과외에 진행 중 사이클이 없음 | 409 | `RECORD409_2` |
+
+동시 요청은 고려하지 않는다. 같은 회차를 동시에 저장하면 늦은 요청은 유니크 제약에 걸려 `COMMON500`이다.
 
 ---
 

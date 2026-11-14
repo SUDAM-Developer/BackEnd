@@ -1,10 +1,15 @@
 package com.sudam.domain.tutoring.entity;
 
 import com.sudam.domain.tutoring.enums.TutoringStatus;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.enums.Subject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class TutoringTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 13, 10, 0);
+    private static final TeacherProfile TEACHER = TeacherProfile.create(
+            User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.MATH), null);
 
     @Test
     @DisplayName("과외는 진행 중 상태로 생성된다")
@@ -52,13 +59,13 @@ class TutoringTest {
         assertThat(tutoring.isDeleted()).isTrue();
         assertThat(tutoring.getDeletedAt()).isEqualTo(NOW);
         assertThat(tutoring.getStudentName()).isNull();
-        assertThat(tutoring.getTeacherId()).isEqualTo(1L);
+        assertThat(tutoring.getTeacher()).isSameAs(TEACHER);
     }
 
     private static Tutoring tutoring() {
         return Tutoring.builder()
-                .teacherId(1L)
-                .subjectId((short) 2)
+                .teacher(TEACHER)
+                .subject(Subject.MATH)
                 .studentName("김민준")
                 .gradeLevel(8)
                 .gradeSchoolYear(2026)
