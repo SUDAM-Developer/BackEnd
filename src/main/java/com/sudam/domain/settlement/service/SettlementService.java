@@ -63,11 +63,13 @@ public class SettlementService {
         // 사이클을 열고 닫는 모든 쪽이 과외 행을 먼저 잠그므로, 동시에 정산이 두 번 돌아도 진행 중 사이클이 둘이 되지 않는다.
         Optional<Tutoring> locked = tutoringRepository.findByIdForUpdate(tutoringId)
                 .filter(tutoring -> !tutoring.isDeleted() && tutoring.getStatus() != TutoringStatus.ENDED);
+        // 1. 과외 잠금: 없거나 삭제 · 종료된 과외는 정산하지 않는다.
         if (locked.isEmpty()) {
             return SettlementResult.notSettled();
         }
         Tutoring tutoring = locked.get();
 
+        // 2. 진행 중 사이클 조회: 없으면 정산할 사이클이 없다.
         Optional<Cycle> inProgress = cycleRepository.findByTutoringIdAndStatus(tutoringId, CycleStatus.IN_PROGRESS);
         if (inProgress.isEmpty()) {
             return SettlementResult.notSettled();
@@ -75,9 +77,12 @@ public class SettlementService {
         Cycle cycle = inProgress.get();
         int cycleNo = cycle.getCycleNo();
 
+        // 3. 정책 선택: 정책은 적용 시작 사이클 번호로 이력 관리되므로, 이 사이클 번호에 적용되는 정책을 고른다.
+        //    선불 청구가 다음 사이클 정책도 써야 해서 전체 목록을 한 번만 읽어 둔다.
         List<TutoringPolicy> policies = tutoringPolicyRepository.findAllByTutoringId(tutoringId);
         TutoringPolicy policy = policyFor(policies, cycleNo);
 
+        // 4. 회차 확인: 인정 회차(정산에 세는 회차, 휴강 제외)가 정산 회차에 못 미치면 아직 정산하지 않는다.
         int recognized = cycleSessionReader.countRecognized(tutoringId, cycle.getId());
         int target = policy.getSettlementSessionCnt();
         if (recognized < target) {
@@ -89,18 +94,23 @@ public class SettlementService {
                     tutoringId, cycle.getId(), recognized, target);
         }
 
+        // 5. 사이클 교체: 지금 사이클을 닫고 바로 다음 사이클을 연다. 정산과 같은 시각을 써서 두 사이클의 경계를 맞춘다.
+        //    Clock 빈을 쓰는 이유는 테스트에서 고정 시각을 넣기 위해서다.
         LocalDateTime now = LocalDateTime.now(clock);
         cycle.settle(now);
         Cycle next = cycleRepository.save(Cycle.open(tutoring, cycleNo + 1, now));
 
-        // 리포트를 먼저 만든다. 리포트는 청구 ID를 갖지 않고, 리포트 쪽은 invoices.report_id로 청구를 찾는다.
+        // 6. 리포트 생성: 리포트를 먼저 만든다. 리포트는 청구 ID를 갖지 않고, 리포트 쪽은 invoices.report_id로 청구를 찾는다.
         Long reportId = settlementReportCreator.create(tutoringId, cycle.getId());
 
+        // 7. 청구 생성: 지급 시점에 따라 청구 대상 사이클과 금액 기준 정책이 달라진다.
+        //    후불은 방금 닫은 사이클을, 선불은 방금 연 다음 사이클을 청구한다.
         Invoice invoice = policy.getPaymentTiming() == PaymentTiming.POSTPAID
                 ? postpaidInvoice(tutoringId, cycle, policy, recognized, reportId)
                 : prepaidInvoice(tutoringId, cycle, next, policies, reportId);
         Invoice saved = invoiceRepository.save(invoice);
 
+        // 8. 결과 반환: 기록 저장 응답의 settlement에 그대로 실린다.
         return SettlementResult.settled(cycle.getId(), reportId, saved.getId());
     }
 
@@ -127,6 +137,7 @@ public class SettlementService {
                 snapshot);
     }
 
+    // 사이클 번호에 적용할 정책. 과외 생성 시 정책을 함께 저장하므로 없으면 데이터 이상이라 500으로 본다.
     private TutoringPolicy policyFor(List<TutoringPolicy> policies, int cycleNo) {
         return TutoringPolicies.applicableTo(policies, cycleNo)
                 .orElseThrow(() -> new SettlementException(SettlementErrorCode.POLICY_NOT_FOUND));
