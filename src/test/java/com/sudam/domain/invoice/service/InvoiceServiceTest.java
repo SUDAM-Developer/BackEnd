@@ -18,6 +18,10 @@ import com.sudam.domain.tutoring.entity.TutoringSetting;
 import com.sudam.domain.tutoring.enums.ParentUpdateFrequency;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
 import com.sudam.domain.tutoring.repository.TutoringSettingRepository;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.enums.Subject;
 import com.sudam.global.exception.ProjectException;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
@@ -480,13 +484,23 @@ class InvoiceServiceTest {
 
     private static Tutoring tutoring(Long id, Long teacherId) {
         Tutoring tutoring = Tutoring.builder()
-                .teacherId(teacherId)
+                .teacher(teacher(teacherId))
+                .subject(Subject.MATH)
                 .studentName("서아")
                 .gradeLevel(10)
                 .gradeSchoolYear(2026)
                 .build();
         set(tutoring, "id", id);
         return tutoring;
+    }
+
+    // 프로필 PK는 @MapsId로 저장 시점에 users.id가 들어가므로, 소유자 비교용 ID는 테스트에서 직접 넣는다.
+    private static TeacherProfile teacher(Long teacherId) {
+        TeacherProfile teacher = TeacherProfile.create(
+                User.createTeacher(Provider.KAKAO, "kakao-" + teacherId, "teacher" + teacherId + "@sudam.app"),
+                "한서윤", List.of(Subject.MATH), null);
+        set(teacher, "id", teacherId);
+        return teacher;
     }
 
     private static Invoice invoice(Long id, Tutoring tutoring, int amount, LocalDateTime createdAt) {

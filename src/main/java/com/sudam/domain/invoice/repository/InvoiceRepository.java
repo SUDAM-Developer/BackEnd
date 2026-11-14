@@ -24,7 +24,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     // 과외는 학생 이름 때문에 함께 가져오고, 입금 목록은 default_batch_fetch_size로 한 번에 모아 온다.
     @Query("""
             select i from Invoice i join fetch i.tutoring t
-            where t.teacherId = :teacherId
+            where t.teacher.id = :teacherId
               and t.deletedAt is null
               and i.status <> com.sudam.domain.invoice.enums.InvoiceStatus.CANCELED
               and coalesce(i.notifiedAt, i.createdAt) >= :start
@@ -37,7 +37,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     // 선생님의 삭제되지 않은 과외에서 주어진 상태의 청구 (안내일과 관계없이). 이전 달 잔액 · 앞선 청구 잔액 계산에 쓴다.
     @Query("""
             select i from Invoice i join fetch i.tutoring t
-            where t.teacherId = :teacherId
+            where t.teacher.id = :teacherId
               and t.deletedAt is null
               and i.status in :statuses
             """)

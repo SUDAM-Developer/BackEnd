@@ -128,7 +128,7 @@ public class InvoiceService {
     }
 
     private boolean isOwnedBy(Tutoring tutoring, Long teacherId) {
-        return Objects.equals(tutoring.getTeacherId(), teacherId) && !tutoring.isDeleted();
+        return Objects.equals(tutoring.getTeacher().getId(), teacherId) && !tutoring.isDeleted();
     }
 
     // '이번 달' 판단 기준: 안내를 보냈으면 안내 시각, 아니면 생성 시각.
