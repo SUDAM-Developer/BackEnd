@@ -179,13 +179,16 @@ class SettlementServiceTest {
     }
 
     @Test
-    @DisplayName("선불 8/8이고 다음 사이클부터 수업료 400,000원이 예약돼 있으면 새 사이클에 400,000원을 NEXT로 청구한다")
+    @DisplayName("선불 8/8이고 다음 사이클부터 수업료 400,000원이 예약돼 있으면 새 사이클에 400,000원을 NEXT로 청구하고, "
+            + "스냅샷 인정 회차 · 시작일 · 휴강은 닫은 사이클, 단가 · 정산 회차는 새 사이클 정책 값이다")
     void 선불_정산은_새_사이클_정책으로_다음_사이클에_청구한다() {
         // given
         TutoringPolicy current = policy(1, 8, PaymentTiming.PREPAID, 360_000, 1L);
         TutoringPolicy reserved = policy(CYCLE_NO + 1, 8, PaymentTiming.PREPAID, 400_000, 2L);
         givenLockedTutoringWithCycle(List.of(current, reserved));
         given(cycleSessionReader.countRecognized(TUTORING_ID, CYCLE_ID)).willReturn(8);
+        given(cycleSessionReader.period(TUTORING_ID, CYCLE_ID))
+                .willReturn(new CyclePeriod(LocalDate.of(2026, 9, 14), LocalDate.of(2026, 11, 12)));
         given(cycleSessionReader.canceledIn(TUTORING_ID, CYCLE_ID)).willReturn(CANCELED);
         givenSavesAssignIds();
 
@@ -203,10 +206,12 @@ class SettlementServiceTest {
         assertThat(issued.getBilledCycleId()).isEqualTo(NEXT_CYCLE_ID);
         assertThat(issued.getReportId()).isEqualTo(REPORT_ID);
         assertThat(issued.getPolicy()).isSameAs(reserved);
+        // 단가 50,000 = 예약된 수업료 400,000 ÷ 8 (새 사이클 정책), 인정 회차 · 시작일 · 휴강은 닫은 사이클 값.
         assertThat(issued.getSnapshot()).isEqualTo(new InvoiceSnapshot(
-                null, 50_000, 8, PaymentTiming.PREPAID, null, CANCELED));
-        // 선불은 새 사이클이 아직 시작 전이라 기간을 읽지 않는다.
-        verify(cycleSessionReader, never()).period(any(), any());
+                8, 50_000, 8, PaymentTiming.PREPAID, LocalDate.of(2026, 9, 14), CANCELED));
+        // 회차 숫자는 새 사이클이 아니라 닫은 사이클에서만 읽는다.
+        verify(cycleSessionReader, never()).period(TUTORING_ID, NEXT_CYCLE_ID);
+        verify(cycleSessionReader, never()).canceledIn(TUTORING_ID, NEXT_CYCLE_ID);
     }
 
     @Test
