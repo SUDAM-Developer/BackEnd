@@ -14,6 +14,8 @@ import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
+import com.sudam.domain.settlement.dto.SettlementResult;
+import com.sudam.domain.settlement.service.SettlementService;
 import com.sudam.domain.tutoring.entity.Textbook;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringPolicies;
@@ -34,7 +36,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 수업 기록 서비스. 반복 일정의 수업 한 회차를 기록하면 회차 · 기록 · 진도 행을 만들고 사이클 진행 현황을 돌려준다.
+ * 수업 기록 서비스. 반복 일정의 수업 한 회차를 기록하면 회차 · 기록 · 진도 행을 만들고,
+ * 정산 회차를 채웠으면 같은 트랜잭션에서 정산까지 실행한 뒤 사이클 진행 현황과 정산 결과를 돌려준다.
  */
 @Service
 @RequiredArgsConstructor
@@ -49,13 +52,16 @@ public class RecordService {
     private final SessionRepository sessionRepository;
     private final SessionRecordRepository sessionRecordRepository;
     private final SessionProgressRepository sessionProgressRepository;
+    private final SettlementService settlementService;
 
     /***
-     * 함수 기능: 반복 일정의 수업 한 회차를 기록한다. 회차 · 기록 · 진도를 한 트랜잭션에서 저장하고 정산은 하지 않는다.
+     * 함수 기능: 반복 일정의 수업 한 회차를 기록한다. 회차 · 기록 · 진도를 저장하고,
+     *          인정 회차가 정산 회차에 닿으면 같은 트랜잭션에서 정산(사이클 교체 · 리포트 · 청구)한다.
+     *          정산 중 실패하면 기록 저장까지 전부 롤백된다.
      * @param teacherId 로그인한 선생님 (= users.id)
      * @param tutoringId 과외 ID
      * @param request 기록 요청
-     * @return 회차 ID, 사이클 안 번호, 사이클 진행 현황
+     * @return 회차 ID, 사이클 안 번호, 사이클 진행 현황, 정산 결과
      * @throws RecordException 과외 · 일정 · 교재가 없거나, 날짜 · 진도가 맞지 않거나, 이미 기록했거나, 진행 중 사이클이 없는 경우
      */
     @Transactional
@@ -101,9 +107,17 @@ public class RecordService {
 
         // 10. 응답 계산: 진행 중 사이클의 인정 회차를 정렬해 가져온다.
         //     목록 크기 = 인정 회차 수, 방금 저장한 회차의 위치 + 1 = 사이클 안 번호.
+        //     정산이 사이클을 닫기 전에 계산해, 정산했더라도 방금 닫은 사이클 기준의 현황을 돌려준다.
         List<Session> recognized = sessionRepository.findRecognizedInCycle(cycle.getId());
-        return SaveRecordResponse.beforeSettlement(session.getId(), recognized.indexOf(session) + 1,
-                cycle.getCycleNo(), recognized.size(), settlementSessionCount(tutoringId, cycle.getCycleNo()));
+        int noInCycle = recognized.indexOf(session) + 1;
+        int settlementSessionCount = settlementSessionCount(tutoringId, cycle.getCycleNo());
+
+        // 11. 정산: 인정 회차가 정산 회차에 닿았으면 정산한다. 닿지 않았으면 settled = false가 돌아온다.
+        //     같은 트랜잭션이라 정산 쪽 조회에도 방금 저장한 회차가 보인다.
+        SettlementResult settlement = settlementService.settleIfReached(tutoringId);
+
+        return SaveRecordResponse.of(session.getId(), noInCycle, cycle.getCycleNo(), recognized.size(),
+                settlementSessionCount, settlement);
     }
 
     /***
