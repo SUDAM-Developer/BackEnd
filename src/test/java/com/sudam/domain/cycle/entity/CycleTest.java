@@ -3,12 +3,17 @@ package com.sudam.domain.cycle.entity;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import com.sudam.domain.cycle.exception.CycleException;
 import com.sudam.domain.tutoring.entity.Tutoring;
+import com.sudam.domain.user.entity.TeacherProfile;
+import com.sudam.domain.user.entity.User;
+import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.enums.Subject;
 import com.sudam.global.exception.ProjectException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +23,8 @@ class CycleTest {
 
     private static final LocalDateTime STARTED_AT = LocalDateTime.of(2026, 11, 1, 10, 0);
     private static final LocalDateTime SETTLED_AT = LocalDateTime.of(2026, 11, 14, 18, 0);
+    private static final TeacherProfile TEACHER = TeacherProfile.create(
+            User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.MATH), null);
 
     @Nested
     @DisplayName("open")
@@ -79,8 +86,8 @@ class CycleTest {
 
     private static Tutoring tutoring() {
         return Tutoring.builder()
-                .teacherId(1L)
-                .subjectId((short) 2)
+                .teacher(TEACHER)
+                .subject(Subject.MATH)
                 .studentName("김민준")
                 .gradeLevel(8)
                 .gradeSchoolYear(2026)
