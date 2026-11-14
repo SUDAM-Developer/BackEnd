@@ -30,11 +30,16 @@ com.sudam
 │   │   ├── entity                      # Tutoring, TutoringSchedule, Textbook, TutoringPolicy, TutoringSetting
 │   │   │   └── TutoringPolicies.java   # 사이클 N에 적용할 정책 행을 고르는 순수 함수
 │   │   ├── enums                       # TutoringStatus, ProgressUnit, PaymentTiming, PresetType, ParentUpdateFrequency
-│   │   └── repository
+│   │   └── repository                  # TutoringRepository.findByIdForUpdate = 사이클 잠금 기준 (사이클을 열고 닫기 전 과외 행 잠금)
 │   ├── participant                     # 과외에 속한 학부모 · 학생 (엔티티 · 레포지토리만)
 │   │   ├── entity/Participant.java
 │   │   ├── enums                       # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
 │   │   └── repository
+│   ├── cycle                           # 수업 사이클 = 정산 단위 묶음 (엔티티 · 레포지토리만)
+│   │   ├── entity/Cycle.java           # open / settle / isInProgress
+│   │   ├── enums/CycleStatus.java      # IN_PROGRESS, SETTLED
+│   │   ├── repository                  # CycleRepository: 진행 중 · 번호별 · 과외별 목록 조회
+│   │   └── exception                   # CycleException, code/CycleErrorCode (CYCLE409_1)
 │   └── invoice                         # 교육비 청구 · 입금 · 금액 수정 이력 (엔티티 · 레포지토리만)
 │       ├── entity                      # Invoice, InvoicePayment, InvoiceAmountAdjustment
 │       │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)
