@@ -20,6 +20,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     @Query("select i from Invoice i where i.id = :id")
     Optional<Invoice> findByIdForUpdate(@Param("id") Long id);
 
+    // 정산 리포트에 붙은 취소 안 된 청구. 리포트는 청구 ID를 갖지 않으므로 청구의 report_id로 찾는다.
+    // 선생님 확인(과외 소유 · 삭제 여부)을 같은 쿼리에서 해서 남의 리포트도 '없음'으로 보이게 하고, 과외는 함께 가져온다.
+    @Query("""
+            select i from Invoice i join fetch i.tutoring t
+            where i.reportId = :reportId
+              and t.teacher.id = :teacherId
+              and t.deletedAt is null
+              and i.status <> com.sudam.domain.invoice.enums.InvoiceStatus.CANCELED
+            """)
+    Optional<Invoice> findActiveByReportIdAndTeacherId(@Param("reportId") Long reportId,
+                                                       @Param("teacherId") Long teacherId);
+
     // 수입 탭 '그 달' 청구: 선생님의 삭제되지 않은 과외(종료 포함)에서 안내일(notified_at, 없으면 created_at)이 [start, end)인 취소 안 된 청구.
     // 과외는 학생 이름 때문에 함께 가져오고, 입금 목록은 default_batch_fetch_size로 한 번에 모아 온다.
     @Query("""

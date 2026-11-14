@@ -858,7 +858,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 1. 정산 실행은 정홍준 담당이에요. 기록 저장(김강민)이 저장 트랜잭션 안에서 `settleIfReached`를 부르고, 결과를 응답 `settlement { settled, cycleId, reportId, invoiceId }`에 그대로 실어요. 호출하는 곳은 기록 저장 하나예요 (P0는 당일 취소 인정이 없어 휴강으로 회차가 늘지 않고, 기록 수정은 회차 수가 바뀌지 않음).
 2. 사이클 엔티티는 정홍준 담당이라 정산이 직접 잠그고 닫고 다음 사이클을 열어요. 회차 숫자(인정 회차 · 기간 · 휴강)와 리포트 생성은 김강민 담당이라 아래 인터페이스 2개로 불러요.
 3. 리포트를 먼저 만들고 청구에 reportId를 넣어요. 리포트는 청구 ID를 갖지 않고, 리포트 쪽은 `invoices.report_id`로 청구를 찾아요.
-4. 교육비 수정 API(`POST /invoices/{invoiceId}/adjustments`, 김강민)는 청구 엔티티의 `adjustAmount`를 써요.
+4. 교육비 수정 API(`POST /invoices/{invoiceId}/adjustments`, 정홍준)는 청구 엔티티의 `adjustAmount`를 써요.
 
 처리 순서와 규칙
 

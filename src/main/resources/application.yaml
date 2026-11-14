@@ -55,3 +55,9 @@ jwt:
 
 crypto:
   account-encryption-key: ${ACCOUNT_ENCRYPTION_KEY} # Base64 32바이트. 계좌번호 AES-GCM 암호화 키
+
+# 시연용 가상 데이터 (global/seed). true일 때만 실행기 빈이 생긴다. 시연이 끝나면 끈다.
+sudam:
+  seed:
+    enabled: ${SUDAM_SEED_ENABLED:false}
+    teacher-kakao-id: ${SUDAM_SEED_TEACHER_KAKAO_ID:} # 비우면 seed-teacher-1 (가짜 계정, 토큰을 콘솔에 출력)

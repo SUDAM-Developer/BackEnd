@@ -17,4 +17,7 @@ public interface TutoringRepository extends JpaRepository<Tutoring, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from Tutoring t where t.id = :id")
     Optional<Tutoring> findByIdForUpdate(@Param("id") Long id);
+
+    // 선생님에게 과외가 하나라도 있는지 (삭제 · 종료 포함). 시연용 가상 데이터 실행기가 이미 만들었는지 판단할 때 쓴다.
+    boolean existsByTeacherId(Long teacherId);
 }
