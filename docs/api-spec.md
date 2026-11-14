@@ -75,6 +75,12 @@
 | --- | --- | --- |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 
+**정산 리포트 (`ReportSuccessCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `REPORT200_1` | 200 | 정산 리포트를 조회했습니다. |
+
 ### 공통 에러 코드
 
 | code | HTTP | message |
@@ -129,6 +135,12 @@
 | `RECORD404_3` | 404 | 교재를 찾을 수 없습니다. |
 | `RECORD409_1` | 409 | 이미 기록한 수업입니다. |
 | `RECORD409_2` | 409 | 진행 중인 수업 사이클이 없습니다. |
+
+**정산 리포트 (`ReportErrorCode`)**
+
+| code | HTTP | message |
+| --- | --- | --- |
+| `REPORT404_1` | 404 | 정산 리포트를 찾을 수 없습니다. |
 
 <!-- TODO: 도메인이 추가되면 에러 코드 표를 도메인별로 덧붙인다. -->
 
@@ -418,7 +430,8 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | 인증 | 필요 (본인 과외만) |
 
 반복 일정의 수업 한 회차를 기록한다. 회차(`sessions`) · 기록(`session_records`) · 진도(`session_progress`) 행을 함께 만든다.
-정산은 하지 않으므로 `settlement`는 항상 정산 전 값이다. 보강 · 추가 회차 기록은 아직 없다.
+이번 기록으로 사이클의 인정 회차 수가 정산 회차에 닿으면 같은 트랜잭션에서 정산한다: 사이클 SETTLED · 다음 사이클 열기 → 정산 리포트 생성 → 교육비 청구 생성.
+정산 중 하나라도 실패하면 기록 저장까지 전부 롤백된다. 보강 · 추가 회차 기록은 아직 없다.
 
 **Request Body**
 
@@ -456,11 +469,13 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | --- | --- | --- |
 | `sessionId` | number | 이번 기록으로 만든 회차 ID |
 | `noInCycle` | number | 사이클 안에서 몇 번째 인정 회차인지 (1부터). 지난 수업을 늦게 기록하면 마지막 번호가 아닐 수 있다 |
-| `cycle.cycleNo` | number | 진행 중 사이클 번호 |
+| `cycle.cycleNo` | number | 기록이 들어간 사이클 번호. 정산했으면 방금 닫은 사이클 |
 | `cycle.recognizedCount` | number | 사이클의 인정 회차 수 (이번 기록 포함) |
 | `cycle.settlementSessionCount` | number | 사이클에 적용되는 정책의 정산 회차 |
-| `settlement.settled` | boolean | 정산 실행 여부. 정산 기능 전까지 항상 `false` |
-| `settlement.cycleId` / `reportId` / `invoiceId` | number \| null | 정산 결과 ID. 정산 기능 전까지 항상 `null` |
+| `settlement.settled` | boolean | 이번 기록으로 정산했으면 `true` |
+| `settlement.cycleId` | number \| null | 정산한(방금 닫은) 사이클 ID. 정산하지 않았으면 `null` |
+| `settlement.reportId` | number \| null | 만든 정산 리포트 ID (`GET /api/v1/reports/{reportId}`). 정산하지 않았으면 `null` |
+| `settlement.invoiceId` | number \| null | 만든 교육비 청구 ID. 정산하지 않았으면 `null` |
 
 ```json
 {
@@ -468,6 +483,17 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
   "noInCycle": 7,
   "cycle": { "cycleNo": 1, "recognizedCount": 7, "settlementSessionCount": 8 },
   "settlement": { "settled": false, "cycleId": null, "reportId": null, "invoiceId": null }
+}
+```
+
+정산 회차를 채운 기록이면:
+
+```json
+{
+  "sessionId": 1199,
+  "noInCycle": 8,
+  "cycle": { "cycleNo": 1, "recognizedCount": 8, "settlementSessionCount": 8 },
+  "settlement": { "settled": true, "cycleId": 88, "reportId": 21, "invoiceId": 301 }
 }
 ```
 
@@ -485,8 +511,79 @@ AT가 만료된 상태로는 호출할 수 없다. 재발급 후 호출한다. �
 | 교재가 없거나 이 과외의 교재가 아님 | 404 | `RECORD404_3` |
 | 같은 일정 · 같은 날짜의 회차를 이미 기록함 | 409 | `RECORD409_1` |
 | 과외에 진행 중 사이클이 없음 | 409 | `RECORD409_2` |
+| 정산할 사이클에 적용할 정책이 없음 (데이터 이상) | 500 | `SETTLEMENT500_1` |
 
 동시 요청은 고려하지 않는다. 같은 회차를 동시에 저장하면 늦은 요청은 유니크 제약에 걸려 `COMMON500`이다.
+
+---
+
+## 정산 리포트
+
+### 정산 리포트 조회
+
+| | |
+| --- | --- |
+| Method | `GET` |
+| Path | `/api/v1/reports/{reportId}` |
+| 인증 | 필요 (본인 과외의 리포트만) |
+
+정산 리포트의 네 영역(요약 · 진도 · 선생님 코멘트 · 교육비 안내) 중 요약과 진도를 조회한다.
+리포트는 수업 기록 저장이 정산 회차를 채울 때 만들어진다 (기록 저장 응답의 `settlement.reportId`).
+통계와 진도 표는 생성 시점에 고정된 값이고, 기간(`period`)만 조회 때 사이클 인정 회차로 계산한다.
+
+**Path Variable**
+
+| 이름 | 타입 | 설명 |
+| --- | --- | --- |
+| `reportId` | number | 정산 리포트 ID |
+
+**Response** (`200`, `REPORT200_1`)
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `reportId` | number | 정산 리포트 ID |
+| `status` | string | 리포트 상태. 발송 기능 전에는 항상 `GENERATED` |
+| `studentName` | string | 학생 이름 |
+| `period.startDate` / `period.endDate` | string | 사이클 인정 회차의 첫 / 마지막 수업일 (`yyyy-MM-dd`) |
+| `stats.completedCount` | number | 진행한 인정 회차 수 |
+| `stats.targetCount` | number | 정산 회차 |
+| `stats.canceledCount` | number | 사이클 기간 안의 휴강 수 |
+| `stats.homeworkRate` | number \| null | 숙제 수행률 %. (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수, 반올림. 결과가 없으면 `null` |
+| `stats.prevHomeworkRate` | number \| null | 직전 사이클 리포트의 수행률. 없으면 `null` |
+| `stats.understanding.high` / `medium` / `low` | number | 이해도 상 · 중 · 하 횟수 |
+| `progress[].textbookName` | string | 교재 이름 (생성 시점) |
+| `progress[].startLabel` / `endLabel` | string | 사이클 첫 회차의 시작 진도 / 마지막 회차의 끝 진도. 단위별 형식: `Unit 12`, `Chapter 3`, `3단원`, `45p`, `3회`, 직접 입력 단위는 숫자 + 단위(`9강`) |
+| `progress[].textbookStatus` | string | 기간 중 추가 · 사용 종료 표기. 지금은 항상 `ACTIVE` |
+
+`progress`는 교재 ID 순이고, 사이클 동안 진도 기록이 없는 교재는 빠진다.
+
+```json
+{
+  "reportId": 21,
+  "status": "GENERATED",
+  "studentName": "윤서아",
+  "period": { "startDate": "2026-09-14", "endDate": "2026-09-30" },
+  "stats": {
+    "completedCount": 8,
+    "targetCount": 8,
+    "canceledCount": 0,
+    "homeworkRate": 88,
+    "prevHomeworkRate": 75,
+    "understanding": { "high": 5, "medium": 3, "low": 0 }
+  },
+  "progress": [
+    { "textbookName": "수능특강 영어", "startLabel": "3강", "endLabel": "9강", "textbookStatus": "ACTIVE" },
+    { "textbookName": "Grammar Zone 기본", "startLabel": "Unit 12", "endLabel": "Unit 20", "textbookStatus": "ACTIVE" }
+  ]
+}
+```
+
+**에러**
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `reportId`가 숫자가 아님 | 400 | `COMMON400` |
+| 리포트가 없거나 다른 선생님 과외의 리포트 | 404 | `REPORT404_1` |
 
 ---
 
