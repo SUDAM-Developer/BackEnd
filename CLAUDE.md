@@ -36,7 +36,10 @@ docker run -d --name redis -p 6379:6379 redis:7-alpine
 
 ## 실행 전제 2: `.env`가 반드시 있어야 한다
 
-`application.yaml`이 `optional:file:.env[.properties]`를 import하고 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `KAKAO_CLIENT_ID` / `KAKAO_CLIENT_SECRET`을 참조한다. `.env`는 git-ignore 대상이고 필요한 키는 `.env.example`에 있다.
+`application.yaml`이 `optional:file:.env[.properties]`를 import하고 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `KAKAO_CLIENT_ID` / `KAKAO_CLIENT_SECRET` / `JWT_SECRET` / `ACCOUNT_ENCRYPTION_KEY`를 참조한다. `.env`는 git-ignore 대상이고 필요한 키는 `.env.example`에 있다.
+
+- `JWT_SECRET`: 토큰 서명 키. 문자열을 UTF-8 바이트 그대로 HMAC 키로 쓰므로 **32바이트 이상**이어야 한다 (예: `openssl rand -base64 48`). 짧으면 `JwtUtil` 빈 생성에서 기동이 실패한다.
+- `ACCOUNT_ENCRYPTION_KEY`: 계좌번호 AES-GCM 키. **Base64로 인코딩한 정확히 32바이트** (`openssl rand -base64 32`). 형식이 틀리면 기동이 실패하고, 키를 바꾸면 이미 저장된 계좌번호를 복호화할 수 없다.
 
 - import가 `optional:`이라 `.env`가 없으면 친절한 메시지 없이 `${DB_URL}` 미해석으로 `DataSourceProperties$DataSourceBeanCreationException`이 터진다. 이 예외를 만나면 코드 문제가 아니라 `.env` 누락/불완전이 원인이다.
 - `SudamApplicationTests`는 전체 `@SpringBootTest`라 **테스트에도 실제 MySQL 연결이 필요**하다. H2 폴백이나 Testcontainers는 없다. 그래서 기본 선택은 컨텍스트를 띄우지 않는 단위 테스트다 (`.claude/rules/test-convention.md`).
