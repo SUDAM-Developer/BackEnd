@@ -31,6 +31,8 @@
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `REPORT200_1` | 200 | 정산 리포트를 조회했습니다. |
 | `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
+| `INVOICE200_2` | 200 | 교육비 안내가 성공적으로 조회되었습니다. |
+| `INVOICE200_3` | 200 | 교육비가 성공적으로 수정되었습니다. |
 | `INVOICE201_1` | 201 | 입금이 성공적으로 확인되었습니다. |
 
 공통 `COMMON200` · `COMMON201`은 도메인에 속하지 않는 응답에만 쓴다.
@@ -71,7 +73,7 @@
 | `INVOICE409_5` | 409 | 입금 확인을 요청할 수 없는 상태입니다. |
 
 - `*404_1`(과외 · 리포트 · 청구)은 대상이 없을 때와 **다른 선생님의 것**일 때 모두 쓴다 (존재 여부를 드러내지 않음).
-- `INVOICE409_2` · `409_4` · `409_5`는 아직 없는 교육비 수정 · 학부모 [입금했어요] API용이다.
+- `INVOICE409_5`는 아직 없는 학부모 [입금했어요] API용이다.
 
 ### 금액 이름
 
@@ -86,6 +88,8 @@
 | `unitPrice` | 수업료 ÷ 정산 회차, 원 미만 버림 (스냅샷) |
 | `recognizedCount` | 청구에 반영한 인정 회차. 선불은 `null` (스냅샷) |
 | `settlementSessionCount` | 정산 회차 (스냅샷). '첫 · 다음 · 이번 N회차'의 N |
+| `deductionAmount` | 정산 회차 × 회당 단가에서 자동 계산 금액(`calculated_amount`)이 모자란 만큼, 최소 0. 회차가 모자란 청구에서만 0보다 크다 |
+| `billedCycleStartDate` | 청구 스냅샷 `cycleStartDate` = 정산한 사이클의 첫 인정 회차 날짜(`yyyy-MM-dd`). 정산 없이 만든 선불 첫 청구(FIRST)는 `null` |
 
 ---
 
@@ -309,6 +313,54 @@
 | `amount` ≤ 0 (`result: { "amount": "입금 금액은 1원 이상이어야 합니다." }`), 깨진 JSON | 400 | `COMMON400` |
 | 청구 없음 · 남의 과외 · 삭제된 과외 | 404 | `INVOICE404_1` |
 | 취소된 청구 / 이미 입금 완료 | 409 | `INVOICE409_1` / `INVOICE409_3` |
+
+### 정산 리포트 교육비 안내 조회 — `GET /api/v1/reports/{reportId}/invoice` (`200`, `INVOICE200_2`)
+
+T-14 정산 리포트의 교육비 안내 블록. `invoices.report_id = reportId`인 취소 안 된 청구 1건을 돌려준다. 리포트는 청구 ID를 갖지 않으므로 청구 쪽에서 바로 찾는다. 요청 본문 없음.
+
+```json
+{
+  "invoiceId": 301,
+  "paymentTiming": "PREPAID",
+  "settlementSessionCnt": 8,
+  "billedCycleStartDate": "2026-09-14",
+  "unitPrice": 45000,
+  "canceledCount": 0,
+  "deductionAmount": 0,
+  "calculatedAmount": 360000,
+  "amount": 360000
+}
+```
+
+- 키 이름 · 순서는 노션 명세와 같다. `settlementSessionCnt` · `paymentTiming` · `unitPrice` · `calculatedAmount` · `amount`는 청구 컬럼 값이다.
+- `canceledCount`: 청구 스냅샷 휴강 내역(`canceledLessons`) 개수. `deductionAmount` · `billedCycleStartDate`는 공통 '금액 이름' 참고.
+- 예: 후불 회차 부족(인정 5 · 정산 8 · 단가 45,000 · 자동 계산 225,000) → `deductionAmount` 135,000. 단가 버림(수업료 100,000 · 3회 → 단가 33,333)은 3 × 33,333 < 100,000이어도 0.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `reportId`가 숫자가 아님 | 400 | `COMMON400` |
+| 리포트에 취소 안 된 청구가 없음 · 남의 과외 · 삭제된 과외의 리포트 | 404 | `INVOICE404_1` |
+
+### 교육비 수정 — `POST /api/v1/invoices/{invoiceId}/adjustments` (`200`, `INVOICE200_3`)
+
+T-14 교육비 수정 시트 [저장]. 청구 행을 잠그고(FOR UPDATE) 금액 변경과 수정 이력 1행(`invoice_amount_adjustments`, `adjusted_by = TEACHER`)을 한 트랜잭션에서 남긴다. `calculatedAmount`는 바뀌지 않는다. 같은 금액이면 아무것도 바꾸지 않고 200. 상태는 입금 합계로 다시 정하되 확인 대기(CONFIRM_REQUESTED)는 바뀐 금액을 다 받은 경우가 아니면 유지한다. 학부모 알림 · 리포트 다시 만들기는 없다.
+
+| 요청 필드 | 필수 | 제약 |
+| --- | --- | --- |
+| `amount` | O | 0 이상 10,000,000 이하 (원) |
+| `reason` | O | 공백 아님, 200자 이내. 교육비 카드 '금액 수정 사유' |
+
+```json
+{ "amount": 375000, "reason": "교재비 15,000원 추가" }
+```
+
+응답은 교육비 안내 조회와 같은 구조다. 예: 360,000원 청구를 위 요청으로 수정 → `amount` 375000, `calculatedAmount` 360000.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 필드 검증 실패 (`result`에 필드별 메시지, 예: `{ "amount": "교육비는 0원 이상이어야 합니다." }`), 깨진 JSON | 400 | `COMMON400` |
+| 청구 없음 · 남의 과외 · 삭제된 과외 | 404 | `INVOICE404_1` |
+| 취소된 청구 / 이미 받은 금액보다 적게 / 함께 보낸 리포트가 발송 완료(SENT) | 409 | `INVOICE409_1` / `INVOICE409_2` / `INVOICE409_4` |
 
 ---
 
