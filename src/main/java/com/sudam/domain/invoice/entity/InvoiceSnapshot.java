@@ -11,11 +11,11 @@ import java.util.List;
  * 교육비 계산 근거 (invoices.snapshot, JSON). 교육비 카드의 '계산 근거'(6.1.2)를 이 값으로 보여준다.
  * 레코드 컴포넌트 이름이 곧 JSON 키다. 이미 저장된 행을 읽을 수 있어야 하므로 이름을 바꾸지 않는다.
  *
- * @param recognizedCount        인정 회차. 선불 청구처럼 회차로 계산하지 않으면 NULL
+ * @param recognizedCount        인정 회차. 정산한 사이클 기준. 정산 없이 만든 청구(선불 첫 청구 FIRST)는 NULL
  * @param unitPrice              회당 단가 = 수업료 ÷ 정산 회차, 원 미만 버림
  * @param settlementSessionCount 정산 회차
  * @param paymentTiming          선불 / 후불
- * @param cycleStartDate         청구 대상 사이클 시작일. 아직 시작하지 않은 사이클(선불 다음 청구)이면 NULL
+ * @param cycleStartDate         사이클 시작일. 정산한 사이클 기준. 정산 없이 만든 청구(선불 첫 청구 FIRST)는 NULL
  * @param canceledLessons        사이클 기간 안의 휴강 내역. 없으면 빈 목록
  */
 public record InvoiceSnapshot(
@@ -35,8 +35,8 @@ public record InvoiceSnapshot(
      * 함수 기능: 적용 정책에서 단가 · 정산 회차 · 선불/후불을 꺼내 스냅샷을 만든다.
      *          청구 컬럼(unit_price 등)과 같은 계산을 쓰도록 단가는 Invoice.unitPriceOf로 구한다.
      * @param policy          이 청구에 적용한 정책
-     * @param recognizedCount 인정 회차 (선불이면 NULL)
-     * @param cycleStartDate  청구 대상 사이클 시작일 (모르면 NULL)
+     * @param recognizedCount 인정 회차. 정산한 사이클 기준 (정산 없이 만든 청구 = 선불 첫 청구 FIRST는 NULL)
+     * @param cycleStartDate  사이클 시작일. 정산한 사이클 기준 (정산 없이 만든 청구 = 선불 첫 청구 FIRST는 NULL)
      * @param canceledLessons 휴강 내역 (NULL이면 빈 목록)
      * @return InvoiceSnapshot
      */
