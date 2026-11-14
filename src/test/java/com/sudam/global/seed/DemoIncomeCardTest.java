@@ -18,7 +18,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,7 +28,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DemoIncomeCardTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 11, 14, 10, 0);
+    private static final LocalDate CYCLE1_START = LocalDate.of(2026, 10, 10);
 
+    private final List<Invoice> invoices = new ArrayList<>();
     private InvoiceListResponse response;
 
     @BeforeEach
@@ -46,11 +50,28 @@ class DemoIncomeCardTest {
                             .bankCode("004").bankName("국민은행").accountNumber("000000-00-000001")
                             .accountHolder("한서윤").build();
                     Participant parent = Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000001");
-                    Invoice invoice = card.issueInvoice(policy, 2L, parent, NOW);
+                    Invoice invoice = card.issueInvoice(policy, 2L, CYCLE1_START, parent, NOW);
+                    invoices.add(invoice);
                     return InvoiceItemResponse.of(invoice, 0, card.unpaidReminderEnabled());
                 })
                 .toList();
         response = InvoiceListResponse.from(items);
+    }
+
+    @Test
+    @DisplayName("스냅샷은 정산 서비스의 선불 청구처럼 정산한 사이클 1 기준 인정 회차 · 시작일을 담는다")
+    void 스냅샷은_정산한_사이클_기준() {
+        // given: setUp
+
+        // when & then
+        assertThat(invoices).allSatisfy(invoice -> {
+            assertThat(invoice.getSnapshot().recognizedCount()).isEqualTo(invoice.getSettlementSessionCnt());
+            assertThat(invoice.getRecognizedCount()).isEqualTo(invoice.getSettlementSessionCnt());
+            assertThat(invoice.getSnapshot().cycleStartDate()).isEqualTo(CYCLE1_START);
+            assertThat(invoice.getSnapshot().canceledLessons()).isEmpty();
+            assertThat(invoice.getBilledCycleId()).isEqualTo(2L);
+            assertThat(invoice.getReportId()).isNull();
+        });
     }
 
     @Test
