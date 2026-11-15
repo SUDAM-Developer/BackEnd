@@ -20,6 +20,11 @@ import java.time.LocalDate;
  * @param deductionAmount      정산 회차 × 단가에서 자동 계산 금액이 모자란 만큼. 최소 0
  * @param calculatedAmount     자동 계산 금액. 교육비를 수정해도 바뀌지 않는다
  * @param amount               최종 금액 (교육비 수정 반영)
+ * @param recognizedCount      인정 회차 ('인정 회차 × 회당 단가' 줄). 정산 없이 만든 청구(FIRST)는 null
+ * @param bankCode             입금 계좌 은행 코드 (청구 시점 스냅샷). 목록에 없는 '기타' 은행은 null
+ * @param bankName             입금 계좌 은행 이름 (청구 시점 스냅샷)
+ * @param accountLast4         입금 계좌 끝 4자리. 화면은 마스킹해 보여 주므로 전체 계좌번호는 내려주지 않는다
+ * @param accountHolder        예금주 (청구 시점 스냅샷)
  */
 public record ReportInvoiceResponse(
         @Schema(description = "청구 ID", example = "301")
@@ -48,7 +53,22 @@ public record ReportInvoiceResponse(
         Integer calculatedAmount,
 
         @Schema(description = "최종 금액(원). 교육비 수정 반영", example = "375000")
-        Integer amount
+        Integer amount,
+
+        @Schema(description = "인정 회차. 정산 없이 만든 선불 첫 청구(FIRST)는 null", example = "8", nullable = true)
+        Integer recognizedCount,
+
+        @Schema(description = "금융결제원 은행 코드 3자리. 목록에 없는 '기타' 은행은 null", example = "004", nullable = true)
+        String bankCode,
+
+        @Schema(description = "은행 이름", example = "국민은행")
+        String bankName,
+
+        @Schema(description = "계좌번호 끝 4자리", example = "1492")
+        String accountLast4,
+
+        @Schema(description = "예금주", example = "한서윤")
+        String accountHolder
 ) {
 
     /***
@@ -69,7 +89,12 @@ public record ReportInvoiceResponse(
                 snapshot != null ? snapshot.canceledLessons().size() : 0,
                 Math.max(0, fullAmount - invoice.getCalculatedAmount()),
                 invoice.getCalculatedAmount(),
-                invoice.getAmount()
+                invoice.getAmount(),
+                invoice.getRecognizedCount(),
+                invoice.getBankCode(),
+                invoice.getBankName(),
+                invoice.getAccountLast4(),
+                invoice.getAccountHolder()
         );
     }
 }

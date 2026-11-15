@@ -48,7 +48,7 @@ class ReportInvoiceControllerTest {
         // given
         given(reportInvoiceService.getReportInvoice(TEACHER_ID, 21L))
                 .willReturn(new ReportInvoiceResponse(301L, PaymentTiming.POSTPAID, 8, null,
-                        45_000, 2, 135_000, 225_000, 225_000));
+                        45_000, 2, 135_000, 225_000, 225_000, 5, "004", "국민은행", "1492", "한서윤"));
 
         // when & then
         mockMvc.perform(get("/api/v1/reports/21/invoice").with(teacher()))
@@ -59,7 +59,13 @@ class ReportInvoiceControllerTest {
                 .andExpect(jsonPath("$.result.invoiceId").value(301))
                 .andExpect(jsonPath("$.result.billedCycleStartDate").doesNotExist())
                 .andExpect(jsonPath("$.result.canceledCount").value(2))
-                .andExpect(jsonPath("$.result.deductionAmount").value(135_000));
+                .andExpect(jsonPath("$.result.deductionAmount").value(135_000))
+                .andExpect(jsonPath("$.result.recognizedCount").value(5))
+                .andExpect(jsonPath("$.result.bankCode").value("004"))
+                .andExpect(jsonPath("$.result.bankName").value("국민은행"))
+                .andExpect(jsonPath("$.result.accountLast4").value("1492"))
+                .andExpect(jsonPath("$.result.accountHolder").value("한서윤"))
+                .andExpect(jsonPath("$.result.accountNumber").doesNotExist());
     }
 
     @Test

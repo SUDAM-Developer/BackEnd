@@ -86,12 +86,12 @@ class InvoiceAdjustmentControllerTest {
     }
 
     @Test
-    @DisplayName("교육비 수정은 200 · INVOICE200_3과 교육비 안내 9개 필드를 돌려준다")
+    @DisplayName("교육비 수정은 200 · INVOICE200_3과 교육비 안내 14개 필드를 돌려준다")
     void 수정_성공() throws Exception {
         // given
         given(reportInvoiceService.adjustAmount(eq(TEACHER_ID), eq(301L), any(AdjustInvoiceAmountRequest.class)))
                 .willReturn(new ReportInvoiceResponse(301L, PaymentTiming.PREPAID, 8, LocalDate.of(2026, 9, 14),
-                        45_000, 0, 0, 360_000, 375_000));
+                        45_000, 0, 0, 360_000, 375_000, 8, "004", "국민은행", "1492", "한서윤"));
 
         // when & then
         mockMvc.perform(post(URL).with(teacher())
@@ -109,7 +109,12 @@ class InvoiceAdjustmentControllerTest {
                 .andExpect(jsonPath("$.result.canceledCount").value(0))
                 .andExpect(jsonPath("$.result.deductionAmount").value(0))
                 .andExpect(jsonPath("$.result.calculatedAmount").value(360_000))
-                .andExpect(jsonPath("$.result.amount").value(375_000));
+                .andExpect(jsonPath("$.result.amount").value(375_000))
+                .andExpect(jsonPath("$.result.recognizedCount").value(8))
+                .andExpect(jsonPath("$.result.bankCode").value("004"))
+                .andExpect(jsonPath("$.result.bankName").value("국민은행"))
+                .andExpect(jsonPath("$.result.accountLast4").value("1492"))
+                .andExpect(jsonPath("$.result.accountHolder").value("한서윤"));
 
         verify(reportInvoiceService).adjustAmount(TEACHER_ID, 301L,
                 new AdjustInvoiceAmountRequest(375_000, "교재비 15,000원 추가"));
