@@ -84,6 +84,23 @@ final class DemoLessonPlan {
     }
 
     /***
+     * 함수 기능: 시작일(포함)부터 앞으로 가며 수업일을 count개 고른다.
+     * @param from  시작일 (수업 요일이면 포함)
+     * @param days  수업 요일
+     * @param count 고를 개수
+     * @return 오래된 날짜부터 정렬한 수업일
+     */
+    static List<LocalDate> lessonDatesFrom(LocalDate from, Collection<DayOfWeek> days, int count) {
+        List<LocalDate> dates = new ArrayList<>();
+        for (LocalDate date = from; dates.size() < count; date = date.plusDays(1)) {
+            if (days.contains(date.getDayOfWeek())) {
+                dates.add(date);
+            }
+        }
+        return List.copyOf(dates);
+    }
+
+    /***
      * 함수 기능: 학년도를 구한다. 한국 학년도는 3월에 시작하므로 1 · 2월은 전년도다.
      * @param today 실행일
      * @return 학년도

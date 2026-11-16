@@ -14,16 +14,22 @@ import com.sudam.domain.user.entity.TeacherProfile;
 import com.sudam.domain.user.entity.User;
 import com.sudam.domain.user.enums.Provider;
 import com.sudam.domain.user.enums.Subject;
+import com.sudam.global.seed.DemoLessonPlan.LessonNote;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DemoIncomeCardTest {
 
@@ -50,7 +56,7 @@ class DemoIncomeCardTest {
                             .bankCode("004").bankName("국민은행").accountNumber("000000-00-000001")
                             .accountHolder("한서윤").build();
                     Participant parent = Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000001");
-                    Invoice invoice = card.issueInvoice(policy, 2L, CYCLE1_START, parent, NOW);
+                    Invoice invoice = card.issueInvoice(policy, 2L, null, CYCLE1_START, parent, NOW);
                     invoices.add(invoice);
                     return InvoiceItemResponse.of(invoice, 0, card.unpaidReminderEnabled());
                 })
@@ -72,6 +78,67 @@ class DemoIncomeCardTest {
             assertThat(invoice.getBilledCycleId()).isEqualTo(2L);
             assertThat(invoice.getReportId()).isNull();
         });
+    }
+
+    @Test
+    @DisplayName("카드마다 기록 수는 정산 회차와 같고, 첫 기록의 지난 숙제만 비어 있다")
+    void 카드의_기록_구성() {
+        // given: DemoIncomeCard.ALL
+
+        // when & then
+        assertThat(DemoIncomeCard.ALL).allSatisfy(card -> {
+            assertThat(card.notes()).hasSize(card.settlementSessionCount());
+            assertThat(card.notes().getFirst().previousHomeworkResult()).isNull();
+            assertThat(card.notes().subList(1, card.notes().size())).allSatisfy(note -> assertThat(note.previousHomeworkResult()).isNotNull());
+        });
+    }
+
+    @Test
+    @DisplayName("이해도 가중평균(상3 · 중2 · 하1)이 박지후 2.5 이상, 윤서아 1.5 이상 2.5 미만, 이도윤 1.5 미만이다")
+    void 학생별_이해도_분포() {
+        // given
+        Map<String, Double> averages = DemoIncomeCard.ALL.stream()
+                .collect(Collectors.toMap(DemoIncomeCard::studentName, card -> card.notes().stream()
+                        .mapToInt(note -> switch (note.understanding()) {
+                            case HIGH -> 3;
+                            case MEDIUM -> 2;
+                            case LOW -> 1;
+                        })
+                        .average().orElseThrow()));
+
+        // when & then
+        assertThat(averages.get("박지후")).isGreaterThanOrEqualTo(2.5);
+        assertThat(averages.get("윤서아")).isGreaterThanOrEqualTo(1.5).isLessThan(2.5);
+        assertThat(averages.get("이도윤")).isLessThan(1.5);
+    }
+
+    @Test
+    @DisplayName("기록 수가 정산 회차와 다른 카드는 만들 수 없다")
+    void 기록_수가_정산_회차와_다르면_예외() {
+        // given
+        List<LessonNote> threeNotes = DemoIncomeCard.ALL.get(2).notes().subList(0, 3);
+
+        // when & then
+        assertThatThrownBy(() -> new DemoIncomeCard("테스트", 7, 4, 200_000, DemoIncomeCard.PaymentState.PENDING,
+                false, List.of(DayOfWeek.MONDAY), LocalTime.of(16, 0), "교재", threeNotes))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("사이클 1 회차 날짜는 시작일부터 수업 요일로 세어 4주(정산일 전) 안에 모두 들어간다")
+    void 사이클_1_회차_날짜() {
+        // given
+        LocalDate settledDate = CYCLE1_START.plusWeeks(4);
+
+        // when & then
+        for (DemoIncomeCard card : DemoIncomeCard.ALL) {
+            List<LocalDate> dates = card.firstCycleLessonDates(CYCLE1_START);
+            assertThat(dates).hasSize(card.notes().size()).isSorted().doesNotHaveDuplicates();
+            assertThat(dates).allSatisfy(date -> {
+                assertThat(date).isAfterOrEqualTo(CYCLE1_START).isBefore(settledDate);
+                assertThat(card.lessonDays()).contains(date.getDayOfWeek());
+            });
+        }
     }
 
     @Test

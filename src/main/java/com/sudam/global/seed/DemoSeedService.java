@@ -12,6 +12,7 @@ import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
+import com.sudam.domain.settlement.port.SettlementReportCreator;
 import com.sudam.domain.tutoring.entity.Textbook;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
@@ -60,6 +61,7 @@ import java.util.stream.Collectors;
 
 /**
  * 시연용 가상 데이터를 만든다. 정산 서비스를 거치지 않고 엔티티를 직접 만들어 저장한다.
+ * 정산 리포트만은 실제 리포트 생성기(SettlementReportCreator)로 만들어 통계 계산을 정산과 맞춘다.
  * sudam.seed.enabled = true일 때만 빈이 생긴다 (실행기와 같은 조건).
  */
 @Service
@@ -94,6 +96,7 @@ public class DemoSeedService {
     private final SessionRepository sessionRepository;
     private final SessionRecordRepository sessionRecordRepository;
     private final SessionProgressRepository sessionProgressRepository;
+    private final SettlementReportCreator settlementReportCreator;
     private final Clock clock;
 
     private final SecureRandom secureRandom = new SecureRandom();
@@ -150,20 +153,28 @@ public class DemoSeedService {
                 .toList());
     }
 
-    // 수입 화면 카드 1장: 사이클 1 SETTLED · 사이클 2 IN_PROGRESS, 사이클 2를 청구하는 선불 청구. 회차 · 기록은 만들지 않는다.
+    /***
+     * 함수 기능: 수입 화면 카드 1장을 만든다. 사이클 1 SETTLED · 사이클 2 IN_PROGRESS, 사이클 2를 청구하는 선불 청구.
+     *          사이클 1에 회차 · 기록 · 진도를 깔고, 실제 정산과 같은 순서
+     *          (사이클 1 정산 → 사이클 2 열기 → 리포트 생성 → 청구 발행)로 리포트를 만들어 청구에 연결한다.
+     *          리포트를 직접 만들지 않고 생성기를 쓰는 이유는 통계 · 진도 표가 실제 정산과 같은 계산으로 나오게 하기 위해서다.
+     */
     private void createIncomeTutoring(TeacherProfile teacher, DemoIncomeCard card, int seq, LocalDateTime now) {
         LocalDate cycleStartDate = now.toLocalDate().minusWeeks(INCOME_CYCLE_START_WEEKS_AGO);
         DemoTutoring base = createBase(teacher, card.studentName(), card.gradeLevel(), card.lessonDays(),
                 card.lessonStart(), cycleStartDate, card.textbookName(), card.settlementSessionCount(),
                 card.tuitionFee(), card.unpaidReminderEnabled(), seq, now);
 
+        Cycle first = cycleRepository.save(Cycle.open(base.tutoring(), 1, cycleStartDate.atStartOfDay()));
+        createRecordedSessions(base, first, card.firstCycleLessonDates(cycleStartDate), card.notes());
+
         LocalDateTime settledAt = now.minusDays(INCOME_CYCLE_SETTLED_DAYS_AGO);
-        Cycle first = Cycle.open(base.tutoring(), 1, cycleStartDate.atStartOfDay());
         first.settle(settledAt);
-        cycleRepository.save(first);
         Cycle second = cycleRepository.save(Cycle.open(base.tutoring(), 2, settledAt));
 
-        invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), cycleStartDate, base.parent(), now));
+        Long reportId = settlementReportCreator.create(base.tutoring().getId(), first.getId());
+        invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), reportId, cycleStartDate,
+                base.parent(), now));
     }
 
     // 김서아: 사이클 1 IN_PROGRESS에 오늘 전 7회 기록. 오늘 회차 · 청구는 만들지 않는다 (오늘 기록하면 8/8로 정산).
@@ -177,18 +188,23 @@ public class DemoSeedService {
                 DemoLessonPlan.LESSON_START, firstDate, DemoLessonPlan.TEXTBOOK_NAME,
                 DemoLessonPlan.SETTLEMENT_SESSION_COUNT, DemoLessonPlan.TUITION_FEE, false, seq, now);
         Cycle cycle = cycleRepository.save(Cycle.open(demo.tutoring(), 1, firstDate.atStartOfDay()));
+        createRecordedSessions(demo, cycle, dates, DemoLessonPlan.NOTES);
+        return demo;
+    }
 
+    // 날짜마다 완료한 정규 회차 + 기록 + 진도(회차마다 2단원씩)를 만든다. dates와 notes는 같은 길이 · 같은 순서다.
+    private void createRecordedSessions(DemoTutoring tutoring, Cycle cycle, List<LocalDate> dates,
+                                        List<DemoLessonPlan.LessonNote> notes) {
         for (int i = 0; i < dates.size(); i++) {
             LocalDate date = dates.get(i);
-            DemoLessonPlan.LessonNote note = DemoLessonPlan.NOTES.get(i);
-            Session session = sessionRepository.save(Session.completeRegular(demo.tutoring(), cycle,
-                    demo.schedules().get(date.getDayOfWeek()), date));
+            DemoLessonPlan.LessonNote note = notes.get(i);
+            Session session = sessionRepository.save(Session.completeRegular(tutoring.tutoring(), cycle,
+                    tutoring.schedules().get(date.getDayOfWeek()), date));
             sessionRecordRepository.save(SessionRecord.create(session, note.understanding(),
                     note.previousHomeworkResult(), note.nextHomework(), note.observationMemo()));
-            sessionProgressRepository.save(SessionProgress.create(session, demo.textbook(),
+            sessionProgressRepository.save(SessionProgress.create(session, tutoring.textbook(),
                     DemoLessonPlan.progressStart(i), DemoLessonPlan.progressEnd(i)));
         }
-        return demo;
     }
 
     // 과외마다 공통: 과외 · 수업 일정 · 교재 1권 · 정책 · 공유 설정 · 학부모(링크 토큰 발급).
