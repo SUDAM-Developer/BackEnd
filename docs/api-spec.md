@@ -328,11 +328,18 @@ T-14 정산 리포트의 교육비 안내 블록. `invoices.report_id = reportId
   "canceledCount": 0,
   "deductionAmount": 0,
   "calculatedAmount": 360000,
-  "amount": 360000
+  "amount": 360000,
+  "recognizedCount": 8,
+  "bankCode": "004",
+  "bankName": "국민은행",
+  "accountLast4": "1492",
+  "accountHolder": "한서윤"
 }
 ```
 
 - 키 이름 · 순서는 노션 명세와 같다. `settlementSessionCnt` · `paymentTiming` · `unitPrice` · `calculatedAmount` · `amount`는 청구 컬럼 값이다.
+- `recognizedCount`: '인정 회차 × 회당 단가' 줄의 회차. 정산 없이 만든 선불 첫 청구(FIRST)는 null이고, 이때 프론트는 `settlementSessionCnt`를 보여 준다.
+- 입금 계좌(`bankCode` · `bankName` · `accountLast4` · `accountHolder`)는 청구 시점 스냅샷이라 이후 과외 계좌를 바꿔도 이 청구는 그대로다. `bankCode`는 금융결제원 3자리, 목록에 없는 '기타' 은행이면 null이고 `bankName`에 직접 입력한 이름이 온다. 짧은 이름('국민') · 로고는 프론트가 `bankCode`로 찾는다. 전체 계좌번호는 내려주지 않는다(화면은 `****` + 끝 4자리).
 - `canceledCount`: 청구 스냅샷 휴강 내역(`canceledLessons`) 개수. `deductionAmount` · `billedCycleStartDate`는 공통 '금액 이름' 참고.
 - 예: 후불 회차 부족(인정 5 · 정산 8 · 단가 45,000 · 자동 계산 225,000) → `deductionAmount` 135,000. 단가 버림(수업료 100,000 · 3회 → 단가 33,333)은 3 × 33,333 < 100,000이어도 0.
 

@@ -109,6 +109,66 @@ class ReportInvoiceResponseTest {
         assertThat(response.deductionAmount()).isZero();
     }
 
+    @Test
+    @DisplayName("입금 계좌는 청구 스냅샷의 은행 코드 · 은행 이름 · 끝 4자리 · 예금주를 그대로 쓰고 인정 회차도 함께 담는다")
+    void 입금_계좌와_인정_회차() {
+        // given
+        TutoringPolicy policy = policy(PaymentTiming.POSTPAID, 360_000, 8);
+        Invoice invoice = issue(policy, InvoiceKind.FINAL, 225_000,
+                InvoiceSnapshot.of(policy, 5, SEP_14, List.of()));
+
+        // when
+        ReportInvoiceResponse response = ReportInvoiceResponse.of(invoice);
+
+        // then
+        assertThat(response.recognizedCount()).isEqualTo(5);
+        assertThat(response.bankCode()).isEqualTo("004");
+        assertThat(response.bankName()).isEqualTo("국민");
+        assertThat(response.accountLast4()).isEqualTo("1492");
+        assertThat(response.accountHolder()).isEqualTo("한서윤");
+    }
+
+    @Test
+    @DisplayName("정산 없이 만든 선불 첫 청구(FIRST)는 인정 회차가 null이다")
+    void 선불_첫_청구_인정_회차() {
+        // given
+        TutoringPolicy policy = policy(PaymentTiming.PREPAID, 360_000, 8);
+        Invoice invoice = issue(policy, InvoiceKind.FIRST, 360_000,
+                InvoiceSnapshot.of(policy, null, null, null));
+
+        // when
+        ReportInvoiceResponse response = ReportInvoiceResponse.of(invoice);
+
+        // then
+        assertThat(response.recognizedCount()).isNull();
+    }
+
+    @Test
+    @DisplayName("목록에 없는 '기타' 은행 계좌면 은행 코드는 null이고 직접 입력한 은행 이름이 담긴다")
+    void 기타_은행() {
+        // given
+        TutoringPolicy policy = TutoringPolicy.builder()
+                .effectiveCycleNo(1)
+                .settlementSessionCnt(8)
+                .paymentTiming(PaymentTiming.PREPAID)
+                .tuitionFee(360_000)
+                .bankCode(null)
+                .bankName("증권사 CMA")
+                .accountNumber("5555-6666-7777")
+                .accountHolder("한서윤")
+                .build();
+        Invoice invoice = issue(policy, InvoiceKind.NEXT, 360_000,
+                InvoiceSnapshot.of(policy, 8, SEP_14, List.of()));
+
+        // when
+        ReportInvoiceResponse response = ReportInvoiceResponse.of(invoice);
+
+        // then
+        assertThat(response.bankCode()).isNull();
+        assertThat(response.bankName()).isEqualTo("증권사 CMA");
+        assertThat(response.accountLast4()).isEqualTo("7777");
+    }
+
     private static TutoringPolicy policy(PaymentTiming timing, int tuitionFee, int settlementSessionCnt) {
         return TutoringPolicy.builder()
                 .effectiveCycleNo(1)
