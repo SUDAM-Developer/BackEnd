@@ -26,6 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -49,6 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -81,6 +83,7 @@ class DemoSeedServiceTest {
     @Mock private SessionRecordRepository sessionRecordRepository;
     @Mock private SessionProgressRepository sessionProgressRepository;
     @Mock private SettlementReportCreator settlementReportCreator;
+    @Mock private DemoSeedResetter demoSeedResetter;
     @Mock private Clock clock;
 
     @InjectMocks
@@ -97,7 +100,7 @@ class DemoSeedServiceTest {
         given(tutoringRepository.existsByTeacherId(1L)).willReturn(true);
 
         // when
-        DemoSeedResult result = demoSeedService.seed("seed-teacher-1");
+        DemoSeedResult result = demoSeedService.seed("seed-teacher-1", false);
 
         // then
         assertThat(result.created()).isFalse();
@@ -108,7 +111,27 @@ class DemoSeedServiceTest {
         verifyNoInteractions(teacherProfileRepository, termsRepository, userTermsAgreementRepository,
                 tutoringScheduleRepository, textbookRepository, tutoringPolicyRepository, tutoringSettingRepository,
                 participantRepository, cycleRepository, invoiceRepository, sessionRepository,
-                sessionRecordRepository, sessionProgressRepository, settlementReportCreator);
+                sessionRecordRepository, sessionProgressRepository, settlementReportCreator, demoSeedResetter);
+    }
+
+    @Test
+    @DisplayName("reset=true면 과외 존재 여부를 보기 전에 시드 선생님의 과외를 지운다 (같은 트랜잭션)")
+    void 리셋이면_확인_전에_삭제() {
+        // given
+        User teacher = User.createTeacher(Provider.KAKAO, "seed-teacher-1", "seed-teacher@sudam.test");
+        ReflectionTestUtils.setField(teacher, "id", 1L);
+        given(userRepository.findByProviderAndProviderId(Provider.KAKAO, "seed-teacher-1"))
+                .willReturn(Optional.of(teacher));
+        // 순서만 확인하려고 삭제 뒤에도 과외가 남아 있다고 두어 생성 단계를 건너뛴다.
+        given(tutoringRepository.existsByTeacherId(1L)).willReturn(true);
+
+        // when
+        demoSeedService.seed("seed-teacher-1", true);
+
+        // then
+        InOrder inOrder = inOrder(demoSeedResetter, tutoringRepository);
+        inOrder.verify(demoSeedResetter).deleteTutoringsOf(1L);
+        inOrder.verify(tutoringRepository).existsByTeacherId(1L);
     }
 
     @Test
@@ -222,7 +245,7 @@ class DemoSeedServiceTest {
             return cycleId + REPORT_ID_OFFSET;
         });
 
-        DemoSeedResult result = demoSeedService.seed("seed-teacher-1");
+        DemoSeedResult result = demoSeedService.seed("seed-teacher-1", false);
         assertThat(result.created()).isTrue();
 
         ArgumentCaptor<Invoice> invoiceCaptor = ArgumentCaptor.forClass(Invoice.class);

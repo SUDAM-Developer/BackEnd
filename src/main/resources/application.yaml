@@ -61,3 +61,4 @@ sudam:
   seed:
     enabled: ${SUDAM_SEED_ENABLED:false}
     teacher-kakao-id: ${SUDAM_SEED_TEACHER_KAKAO_ID:} # 비우면 seed-teacher-1 (가짜 계정, 토큰을 콘솔에 출력)
+    reset: ${SUDAM_SEED_RESET:false} # enabled와 함께 true면 시드 선생님의 과외를 지우고 다시 만든다. 리셋 후 다시 끈다

@@ -35,6 +35,16 @@ class DemoSeedRunnerConditionTest {
     }
 
     @Test
+    @DisplayName("sudam.seed.enabled=false면 sudam.seed.reset=true여도 리셋기 빈이 생기지 않는다")
+    void 시드가_꺼져_있으면_리셋기_없음() {
+        // when & then
+        new ApplicationContextRunner()
+                .withUserConfiguration(DemoSeedResetter.class)
+                .withPropertyValues("sudam.seed.enabled=false", "sudam.seed.reset=true")
+                .run(context -> assertThat(context).doesNotHaveBean(DemoSeedResetter.class));
+    }
+
+    @Test
     @DisplayName("sudam.seed.enabled=true면 실행기 빈이 생긴다")
     void 설정값이_true면_빈_생성() {
         // given: 서비스의 레포지토리 의존성 대신 서비스 자체를 가짜로 둔다
