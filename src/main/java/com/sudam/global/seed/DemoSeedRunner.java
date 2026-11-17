@@ -22,25 +22,38 @@ public class DemoSeedRunner implements ApplicationRunner {
     private final DemoSeedService demoSeedService;
     private final JwtUtil jwtUtil;
     private final String teacherKakaoId;
+    private final boolean reset;
 
     public DemoSeedRunner(DemoSeedService demoSeedService, JwtUtil jwtUtil,
-                          @Value("${sudam.seed.teacher-kakao-id:}") String teacherKakaoId) {
+                          @Value("${sudam.seed.teacher-kakao-id:}") String teacherKakaoId,
+                          @Value("${sudam.seed.reset:false}") boolean reset) {
         this.demoSeedService = demoSeedService;
         this.jwtUtil = jwtUtil;
         this.teacherKakaoId = teacherKakaoId == null || teacherKakaoId.isBlank()
                 ? DEFAULT_TEACHER_KAKAO_ID
                 : teacherKakaoId.trim();
+        this.reset = reset;
     }
 
     /***
      * 함수 기능: 가상 데이터를 만들고 시연에 필요한 값을 로그로 남긴다.
+     *          sudam.seed.reset = true면 시드 선생님의 과외를 지우고 다시 만든다 (삭제 · 생성은 한 트랜잭션).
      *          기본 회원번호(가짜 계정)일 때만 액세스 토큰을 콘솔 로그에 한 번 출력한다.
      *          카카오 회원번호를 넣었으면 실제 사람 계정이므로 토큰을 출력하지 않는다. 토큰은 파일 · DB · 응답에 남기지 않는다.
      * @param args 실행 인자 (쓰지 않음)
      */
     @Override
     public void run(ApplicationArguments args) {
-        DemoSeedResult result = demoSeedService.seed(teacherKakaoId);
+        if (reset) {
+            // 켜 둔 채 두면 재기동할 때마다 리허설 데이터가 지워지므로 크게 알린다.
+            log.warn("""
+
+                    ==================================================================
+                    [가상 데이터] 리셋 모드(SUDAM_SEED_RESET=true): 시드 선생님의 과외를 지우고 다시 만듭니다.
+                    리셋이 끝나면 SUDAM_SEED_RESET을 끄세요. 켜 두면 재기동할 때마다 데이터가 지워집니다.
+                    ==================================================================""");
+        }
+        DemoSeedResult result = demoSeedService.seed(teacherKakaoId, reset);
         if (!result.created()) {
             log.info("[가상 데이터] 가상 데이터가 이미 있어 건너뜀. teacherUserId={}", result.teacherUserId());
             return;
