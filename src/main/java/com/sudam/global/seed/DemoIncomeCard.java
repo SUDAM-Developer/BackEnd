@@ -38,6 +38,7 @@ import static java.time.DayOfWeek.WEDNESDAY;
  * @param lessonStart            수업 시작 시각 (90분 수업)
  * @param textbookName           교재 1권 이름
  * @param notes                  사이클 1 회차 기록 (정산 회차만큼, 오래된 순)
+ * @param aiDraftComment         사이클 1 리포트의 AI 초안 코멘트 (UT에서는 AI 생성 대신 시드가 넣는다)
  */
 record DemoIncomeCard(
         String studentName,
@@ -49,7 +50,8 @@ record DemoIncomeCard(
         List<DayOfWeek> lessonDays,
         LocalTime lessonStart,
         String textbookName,
-        List<LessonNote> notes
+        List<LessonNote> notes,
+        String aiDraftComment
 ) {
 
     static final int PARTIAL_PAID_AMOUNT = 120_000;
@@ -100,16 +102,38 @@ record DemoIncomeCard(
             new LessonNote(Understanding.HIGH, HomeworkResult.DONE, "Unit 15~16 누적 복습", "누적 시험 56/60")
     );
 
+    // 기록 메모를 바탕으로 쓴 AI 초안. 선생님이 확인 · 수정하는 흐름(T-14)을 보여주려고 확인 전 상태로 넣는다.
+    private static final String JIHU_COMMENT = "이번 달 지후는 천일문 기본 Unit 1부터 16까지 진도를 나갔습니다. "
+            + "긴 문장도 끊어 읽기가 안정적이고, to부정사 · 관계대명사 문장을 정확하게 해석하고 직접 만들어 냅니다. "
+            + "분사구문과 가정법 시제에서 실수가 있었지만, 지난 시간 오답을 스스로 고쳐 오면서 마지막 수업에는 실수가 눈에 띄게 줄었습니다. "
+            + "다음 달에는 실전 지문에 구문 분석을 적용하는 연습을 이어 가겠습니다.";
+    private static final String SEOA_COMMENT = "이번 달 서아는 리딩튜터 중급 Unit 1부터 16까지 지문을 읽고 요약하는 연습을 했습니다. "
+            + "주제문은 잘 찾지만 세부 내용과 추론 문제에서 근거를 찾는 데 아직 시간이 걸립니다. "
+            + "숙제를 못 해 온 주에는 지문 이해가 늦었는데, 단어 시험이 18/25에서 23/25로 오르면서 독해도 함께 좋아지고 있습니다. "
+            + "다음 달에는 단어 복습을 꾸준히 이어 가면서 추론 문제 근거 찾기를 집중해서 연습하겠습니다.";
+    private static final String DOYUN_COMMENT = "이번 달 도윤이는 Grammar Zone 기본 Unit 1부터 8까지 시제 · 조동사 · 수동태를 다뤘습니다. "
+            + "시제 개념이 많이 비어 있어 기초부터 다시 설명했고, 완료시제와 과거시제를 아직 헷갈려합니다. "
+            + "조동사는 비교적 잘 따라왔습니다. 학원 시험 기간에는 숙제를 하기 어려웠는데, "
+            + "다음 달에는 숙제 양을 조절해 매주 시제 문제를 꾸준히 풀 수 있게 하겠습니다.";
+    private static final String HARIN_COMMENT = "이번 달 하린이는 능률 VOCA 중학 Unit 1부터 16까지 단어를 익혔습니다. "
+            + "첫 수업 때는 철자를 자주 틀렸지만, 단어 시험이 27/30에서 29/30으로 오르고 누적 시험도 56/60을 받았습니다. "
+            + "접두사 뜻 정리를 어려워했는데, 마지막 수업에서는 접두사로 처음 보는 단어의 뜻을 스스로 추측해 냈습니다. "
+            + "다음 달에는 비슷한 뜻 단어를 구분하는 연습을 더하겠습니다.";
+
     // 카드 표시 순서(확인 대기 → 입금 대기 → 일부 입금 → 입금 완료)와 같은 순서로 둔다. 시간은 김서아(18:00~19:30)와 겹치지 않게 골랐다.
     static final List<DemoIncomeCard> ALL = List.of(
             new DemoIncomeCard("박지후", 8, 8, 360_000, PaymentState.CONFIRM_REQUESTED, false,
-                    List.of(TUESDAY, THURSDAY), LocalTime.of(16, 0), "천일문 기본", JIHU_NOTES),
+                    List.of(TUESDAY, THURSDAY), LocalTime.of(16, 0), "천일문 기본", JIHU_NOTES,
+                    JIHU_COMMENT),
             new DemoIncomeCard("윤서아", 9, 8, 360_000, PaymentState.PENDING, true,
-                    List.of(MONDAY, WEDNESDAY), LocalTime.of(16, 0), "리딩튜터 중급", SEOA_NOTES),
+                    List.of(MONDAY, WEDNESDAY), LocalTime.of(16, 0), "리딩튜터 중급", SEOA_NOTES,
+                    SEOA_COMMENT),
             new DemoIncomeCard("이도윤", 11, 4, 200_000, PaymentState.PARTIAL, false,
-                    List.of(SATURDAY), LocalTime.of(10, 0), "Grammar Zone 기본", DOYUN_NOTES),
+                    List.of(SATURDAY), LocalTime.of(10, 0), "Grammar Zone 기본", DOYUN_NOTES,
+                    DOYUN_COMMENT),
             new DemoIncomeCard("김하린", 7, 8, 280_000, PaymentState.PAID, false,
-                    List.of(TUESDAY, FRIDAY), LocalTime.of(20, 0), "능률 VOCA 중학", HARIN_NOTES)
+                    List.of(TUESDAY, FRIDAY), LocalTime.of(20, 0), "능률 VOCA 중학", HARIN_NOTES,
+                    HARIN_COMMENT)
     );
 
     /***

@@ -12,6 +12,7 @@ import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
+import com.sudam.domain.report.repository.SettlementReportRepository;
 import com.sudam.domain.settlement.port.SettlementReportCreator;
 import com.sudam.domain.tutoring.entity.Textbook;
 import com.sudam.domain.tutoring.entity.Tutoring;
@@ -97,6 +98,7 @@ public class DemoSeedService {
     private final SessionRecordRepository sessionRecordRepository;
     private final SessionProgressRepository sessionProgressRepository;
     private final SettlementReportCreator settlementReportCreator;
+    private final SettlementReportRepository settlementReportRepository;
     private final DemoSeedResetter demoSeedResetter;
     private final Clock clock;
 
@@ -164,6 +166,7 @@ public class DemoSeedService {
      *          사이클 1에 회차 · 기록 · 진도를 깔고, 실제 정산과 같은 순서
      *          (사이클 1 정산 → 사이클 2 열기 → 리포트 생성 → 청구 발행)로 리포트를 만들어 청구에 연결한다.
      *          리포트를 직접 만들지 않고 생성기를 쓰는 이유는 통계 · 진도 표가 실제 정산과 같은 계산으로 나오게 하기 위해서다.
+     *          UT에서는 AI 생성을 빼므로 리포트에 카드의 AI 초안 코멘트를 확인 전 상태로 넣는다 (같은 트랜잭션이라 변경 감지로 저장).
      */
     private void createIncomeTutoring(TeacherProfile teacher, DemoIncomeCard card, int seq, LocalDateTime now) {
         LocalDate cycleStartDate = now.toLocalDate().minusWeeks(INCOME_CYCLE_START_WEEKS_AGO);
@@ -179,6 +182,9 @@ public class DemoSeedService {
         Cycle second = cycleRepository.save(Cycle.open(base.tutoring(), 2, settledAt));
 
         Long reportId = settlementReportCreator.create(base.tutoring().getId(), first.getId());
+        settlementReportRepository.findById(reportId)
+                .orElseThrow(() -> new IllegalStateException("방금 만든 리포트가 없습니다. reportId=" + reportId))
+                .draftComment(card.aiDraftComment());
         invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), reportId, cycleStartDate,
                 base.parent(), now));
     }

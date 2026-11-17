@@ -8,6 +8,9 @@ import com.sudam.domain.invoice.repository.InvoiceRepository;
 import com.sudam.domain.participant.repository.ParticipantRepository;
 import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
+import com.sudam.domain.report.entity.SettlementReport;
+import com.sudam.domain.report.enums.CommentSource;
+import com.sudam.domain.report.repository.SettlementReportRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
 import com.sudam.domain.settlement.port.SettlementReportCreator;
@@ -83,6 +86,7 @@ class DemoSeedServiceTest {
     @Mock private SessionRecordRepository sessionRecordRepository;
     @Mock private SessionProgressRepository sessionProgressRepository;
     @Mock private SettlementReportCreator settlementReportCreator;
+    @Mock private SettlementReportRepository settlementReportRepository;
     @Mock private DemoSeedResetter demoSeedResetter;
     @Mock private Clock clock;
 
@@ -111,7 +115,8 @@ class DemoSeedServiceTest {
         verifyNoInteractions(teacherProfileRepository, termsRepository, userTermsAgreementRepository,
                 tutoringScheduleRepository, textbookRepository, tutoringPolicyRepository, tutoringSettingRepository,
                 participantRepository, cycleRepository, invoiceRepository, sessionRepository,
-                sessionRecordRepository, sessionProgressRepository, settlementReportCreator, demoSeedResetter);
+                sessionRecordRepository, sessionProgressRepository, settlementReportCreator, settlementReportRepository,
+                demoSeedResetter);
     }
 
     @Test
@@ -185,6 +190,24 @@ class DemoSeedServiceTest {
     }
 
     @Test
+    @DisplayName("수입 카드 리포트마다 그 학생의 AI 초안 코멘트가 확인 전 상태로 들어간다 (UT에서 AI 생성 대신)")
+    void 리포트에_AI_초안_코멘트() {
+        // given
+        SeedCapture capture = seedAll();
+
+        // when
+        Map<String, Cycle> firstCycles = capture.firstCycles();
+
+        // then
+        for (DemoIncomeCard card : DemoIncomeCard.ALL) {
+            SettlementReport report = capture.reports().get(firstCycles.get(card.studentName()).getId() + REPORT_ID_OFFSET);
+            assertThat(report.getComment()).isEqualTo(card.aiDraftComment());
+            assertThat(report.getCommentSource()).isEqualTo(CommentSource.AI_DRAFT);
+            assertThat(report.isCommentReviewed()).isFalse();
+        }
+    }
+
+    @Test
     @DisplayName("수입 카드의 사이클 1 회차 수는 정산 회차와 같고, 날짜는 사이클 시작일 ~ 정산 전날의 수업 요일이다")
     void 사이클_1_회차_수는_정산_회차() {
         // given
@@ -244,13 +267,19 @@ class DemoSeedServiceTest {
                     .ifPresent(cycle -> statusAtReportCreation.put(cycleId, cycle.getStatus()));
             return cycleId + REPORT_ID_OFFSET;
         });
+        // 생성기가 만든 리포트를 시드가 다시 조회해 초안을 넣으므로, ID마다 빈 리포트를 하나씩 돌려준다.
+        Map<Long, SettlementReport> reports = new HashMap<>();
+        given(settlementReportRepository.findById(anyLong())).willAnswer(invocation -> Optional.of(
+                reports.computeIfAbsent(invocation.getArgument(0), id -> SettlementReport.builder()
+                        .completedCount(8).targetCount(8).canceledCount(0)
+                        .understandingHigh(0).understandingMedium(0).understandingLow(0).build())));
 
         DemoSeedResult result = demoSeedService.seed("seed-teacher-1", false);
         assertThat(result.created()).isTrue();
 
         ArgumentCaptor<Invoice> invoiceCaptor = ArgumentCaptor.forClass(Invoice.class);
         verify(invoiceRepository, times(DemoIncomeCard.ALL.size())).save(invoiceCaptor.capture());
-        return new SeedCapture(cycles, sessions, invoiceCaptor.getAllValues(), statusAtReportCreation);
+        return new SeedCapture(cycles, sessions, invoiceCaptor.getAllValues(), statusAtReportCreation, reports);
     }
 
     // 저장할 때 IDENTITY처럼 ID를 붙인다. ID 필드가 따로 없는 엔티티(@MapsId)는 그대로 둔다.
@@ -268,7 +297,7 @@ class DemoSeedServiceTest {
     }
 
     private record SeedCapture(List<Cycle> cycles, List<Session> sessions, List<Invoice> invoices,
-                               Map<Long, CycleStatus> statusAtReportCreation) {
+                               Map<Long, CycleStatus> statusAtReportCreation, Map<Long, SettlementReport> reports) {
 
         // 수입 카드 과외의 사이클 1 (학생 이름 → 사이클). 김서아는 뺀다.
         Map<String, Cycle> firstCycles() {

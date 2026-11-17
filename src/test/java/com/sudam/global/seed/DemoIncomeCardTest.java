@@ -120,8 +120,18 @@ class DemoIncomeCardTest {
 
         // when & then
         assertThatThrownBy(() -> new DemoIncomeCard("테스트", 7, 4, 200_000, DemoIncomeCard.PaymentState.PENDING,
-                false, List.of(DayOfWeek.MONDAY), LocalTime.of(16, 0), "교재", threeNotes))
+                false, List.of(DayOfWeek.MONDAY), LocalTime.of(16, 0), "교재", threeNotes, "초안"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("카드마다 AI 초안 코멘트가 있고 코멘트 저장 한도(1000자) 안이다")
+    void 카드의_AI_초안_코멘트() {
+        // when & then
+        assertThat(DemoIncomeCard.ALL).allSatisfy(card -> {
+            assertThat(card.aiDraftComment()).isNotBlank();
+            assertThat(card.aiDraftComment().length()).isLessThanOrEqualTo(1000);
+        });
     }
 
     @Test
