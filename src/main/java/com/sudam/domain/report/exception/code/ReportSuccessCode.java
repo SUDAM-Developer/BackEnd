@@ -10,6 +10,9 @@ import org.springframework.http.HttpStatus;
 public enum ReportSuccessCode implements BaseSuccessCode {
 
     REPORT_FOUND(HttpStatus.OK, "REPORT200_1", "정산 리포트를 조회했습니다."),
+    COMMENT_FOUND(HttpStatus.OK, "REPORT200_2", "정산 리포트 코멘트를 조회했습니다."),
+    COMMENT_SAVED(HttpStatus.OK, "REPORT200_3", "정산 리포트 코멘트를 저장하고 확인했습니다."),
+    REPORT_SENT(HttpStatus.OK, "REPORT200_4", "정산 리포트를 보냈습니다."),
     ;
 
     private final HttpStatus status;
