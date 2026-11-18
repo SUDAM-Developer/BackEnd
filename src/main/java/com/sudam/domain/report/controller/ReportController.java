@@ -2,6 +2,7 @@ package com.sudam.domain.report.controller;
 
 import com.sudam.domain.report.dto.request.SaveReportCommentRequest;
 import com.sudam.domain.report.dto.response.ReportCommentResponse;
+import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.dto.response.ReportSendResponse;
 import com.sudam.domain.report.exception.code.ReportSuccessCode;
@@ -32,6 +33,15 @@ public class ReportController {
     private final ReportService reportService;
     private final ReportCommentService reportCommentService;
     private final ReportSendService reportSendService;
+
+    @Operation(summary = "정산 리포트 목록 조회",
+            description = "로그인한 선생님의 정산 리포트를 최근에 만든 순으로 조회한다. 리포트마다 발송 상태(GENERATED / SENT)와 "
+                    + "발송 시각을 담는다. 삭제한 과외의 리포트는 빠진다. 리포트가 없으면 items가 빈 배열.")
+    @GetMapping("/deliveries")
+    public ApiResponse<ReportDeliveryListResponse> listDeliveries(@AuthenticationPrincipal CustomOAuth2User principal) {
+        return ApiResponse.onSuccess(ReportSuccessCode.DELIVERIES_FOUND,
+                reportService.listDeliveries(principal.getUserId()));
+    }
 
     @Operation(summary = "정산 리포트 조회",
             description = "정산 리포트의 요약(회차 · 숙제 · 이해도)과 교재별 진도를 조회한다. "

@@ -1,5 +1,6 @@
 package com.sudam.domain.report.service;
 
+import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.exception.ReportException;
@@ -24,6 +25,15 @@ public class ReportService {
     private final SettlementReportRepository settlementReportRepository;
     private final SettlementReportProgressRepository settlementReportProgressRepository;
     private final SessionRepository sessionRepository;
+
+    /***
+     * 함수 기능: 선생님의 정산 리포트 목록(발송 현황)을 최근에 만든 순으로 조회한다.
+     * @param teacherId 로그인한 선생님 (= users.id)
+     * @return 리포트 목록 응답. 리포트가 없으면 빈 목록
+     */
+    public ReportDeliveryListResponse listDeliveries(Long teacherId) {
+        return ReportDeliveryListResponse.from(settlementReportRepository.findAllOfTeacher(teacherId));
+    }
 
     /***
      * 함수 기능: 정산 리포트의 요약 · 진도를 조회한다.

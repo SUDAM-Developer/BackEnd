@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-14 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
+> 최종 수정: 2026-11-18 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
 
 ## 공통
 
@@ -30,6 +30,10 @@
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `REPORT200_1` | 200 | 정산 리포트를 조회했습니다. |
+| `REPORT200_2` | 200 | 정산 리포트 코멘트를 조회했습니다. |
+| `REPORT200_3` | 200 | 정산 리포트 코멘트를 저장하고 확인했습니다. |
+| `REPORT200_4` | 200 | 정산 리포트를 보냈습니다. |
+| `REPORT200_5` | 200 | 정산 리포트 목록을 조회했습니다. |
 | `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
 | `INVOICE200_2` | 200 | 교육비 안내가 성공적으로 조회되었습니다. |
 | `INVOICE200_3` | 200 | 교육비가 성공적으로 수정되었습니다. |
@@ -219,6 +223,29 @@
 ---
 
 ## 정산 리포트
+
+### 정산 리포트 목록 조회 — `GET /api/v1/reports/deliveries` (`200`, `REPORT200_5`)
+
+리포트 목록 화면(T-13). **내 과외**(삭제되지 않음, 종료 포함)의 리포트를 최근에 만든 순(`reportId` 큰 순)으로 돌려준다. 요청 파라미터 없음, 페이징 없음.
+
+```json
+{
+  "items": [
+    {
+      "reportId": 22, "tutoringId": 4, "studentName": "박지후",
+      "status": "SENT", "sentAt": "2026-10-01T09:20:00", "createdAt": "2026-09-30T21:00:00"
+    },
+    {
+      "reportId": 21, "tutoringId": 3, "studentName": "윤서아",
+      "status": "GENERATED", "sentAt": null, "createdAt": "2026-09-29T20:00:00"
+    }
+  ]
+}
+```
+
+- `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT` ("보냄" 표시). `sentAt`: 첫 발송 확인 시각, 보내지 않았으면 `null`.
+- `createdAt`: 리포트를 만든 시각 (정산 시각).
+- 리포트가 없으면 `items`는 `[]`.
 
 ### 정산 리포트 조회 — `GET /api/v1/reports/{reportId}` (`200`, `REPORT200_1`)
 
