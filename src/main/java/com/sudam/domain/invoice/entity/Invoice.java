@@ -327,6 +327,20 @@ public class Invoice extends BaseTimeEntity {
     }
 
     /***
+     * 함수 기능: 선생님이 카카오톡으로 입금 안내를 다시 보낸 것을 기록한다 (마지막 시각으로 덮어쓴다).
+     *          수입 카드 아래 줄이 '카톡으로 입금 안내를 다시 보냈어요'(RESENT)가 된다. 청구 행을 잠근 뒤 호출한다.
+     * @param renotifiedAt 다시 보낸 시각
+     * @throws InvoiceException 취소된 청구면 INVOICE409_1, 이미 입금 완료면 INVOICE409_3
+     */
+    public void renotify(LocalDateTime renotifiedAt) {
+        validateNotCanceled();
+        if (status == InvoiceStatus.PAID) {
+            throw new InvoiceException(InvoiceErrorCode.ALREADY_PAID);
+        }
+        this.renotifiedAt = renotifiedAt;
+    }
+
+    /***
      * 함수 기능: 청구를 취소한다. 취소 후에는 같은 사이클로 다시 청구할 수 있다. 이미 취소됐으면 아무것도 하지 않는다.
      * @param canceledAt 취소 시각
      */

@@ -100,7 +100,30 @@ public class InvoiceService {
         return new PaymentConfirmResponse(recorded.payment().getId(), recorded.appliedAmount(), item);
     }
 
-    // 두 API가 공유하는 한 줄 변환. 공유 설정은 대상 과외 것만 한 번에 가져온다.
+    /***
+     * 함수 기능: 카카오톡 공유 창으로 입금 안내를 다시 보낸 뒤 호출한다. 다시 보낸 시각을 남기고
+     *          바뀐 한 줄(아래 줄 RESENT)을 목록과 같은 변환으로 돌려준다.
+     * @param teacherId 로그인한 선생님 (users.id)
+     * @param invoiceId 청구 ID
+     * @return 다시 보낸 뒤의 교육비 한 줄
+     * @throws InvoiceException 청구가 없거나 내 과외의 청구가 아니면 INVOICE404_1,
+     *                          취소된 청구면 INVOICE409_1, 이미 입금 완료면 INVOICE409_3
+     */
+    @Transactional
+    public InvoiceItemResponse renotify(Long teacherId, Long invoiceId) {
+        // 입금 확인과 겹치면 늦게 커밋한 쪽이 상태를 덮어쓰므로 청구 행을 잠근 뒤 바꾼다.
+        Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
+                .filter(found -> isOwnedBy(found.getTutoring(), teacherId))
+                .orElseThrow(() -> new InvoiceException(InvoiceErrorCode.INVOICE_NOT_FOUND));
+
+        invoice.renotify(LocalDateTime.now(clock));
+
+        List<Invoice> unsettled =
+                invoiceRepository.findAllByTutoringIdAndStatusIn(invoice.getTutoring().getId(), UNSETTLED_STATUSES);
+        return toItems(List.of(invoice), unsettled).getFirst();
+    }
+
+    // 세 API가 공유하는 한 줄 변환. 공유 설정은 대상 과외 것만 한 번에 가져온다.
     private List<InvoiceItemResponse> toItems(Collection<Invoice> targets, Collection<Invoice> unsettled) {
         Set<Long> tutoringIds = targets.stream()
                 .map(invoice -> invoice.getTutoring().getId())
