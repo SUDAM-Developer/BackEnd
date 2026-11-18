@@ -242,12 +242,66 @@
 }
 ```
 
-- `status`: 발송 기능 전까지 `GENERATED`. `textbookStatus`: 교재 추가 · 종료 기능 전까지 `ACTIVE`.
+- `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT`. `textbookStatus`: 교재 추가 · 종료 기능 전까지 `ACTIVE`.
 - `period`: 사이클 인정 회차의 첫 · 마지막 수업일. `canceledCount`: 그 기간의 휴강 수.
 - `homeworkRate`: (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수, % 반올림. 결과가 없으면 `null`. `prevHomeworkRate`: 직전 사이클 리포트 값, 없으면 `null`.
 - `progress`: 교재 ID 순, 사이클 첫 회차 시작 ~ 마지막 회차 끝 진도. 라벨 `Unit 12` · `Chapter 3` · `3단원` · `45p` · `3회`, 직접 입력 단위는 숫자 + 단위(`9강`). 진도 기록이 없는 교재는 빠진다.
 
 에러: `reportId`가 숫자가 아님 `COMMON400` / 없거나 남의 리포트 `REPORT404_1`.
+
+### 코멘트 조회 — `GET /api/v1/reports/{reportId}/comment` (`200`, `REPORT200_2`)
+
+본인 과외의 리포트만. 리포트 네 영역 중 코멘트.
+
+```json
+{
+  "comment": "이번 달 서아는 리딩튜터 중급 Unit 1부터 16까지 …",
+  "commentSource": "AI_DRAFT",
+  "reviewed": false,
+  "aiStatus": "DONE",
+  "softenedSentences": []
+}
+```
+
+- `comment` · `commentSource`: 코멘트가 아직 없으면 둘 다 `null`. `commentSource`가 `AI_DRAFT`면 'AI 초안' 배지. 선생님이 저장하면 `TEACHER` (`AI_EDITED`는 AI 기능과 함께).
+- `reviewed`: 선생님이 코멘트를 확인했는지. `false`면 발송할 수 없다.
+- `aiStatus` · `softenedSentences`: AI 기능 전이라 자리만 있다. `aiStatus`는 `commentSource`가 `AI_DRAFT`일 때만 `DONE`이고 그 외 `null`, `softenedSentences`는 항상 `[]` (UT에서 '부드럽게 만든 문장'은 숨김).
+- UT에서는 AI 생성을 빼므로 실제 정산으로 만든 리포트는 코멘트가 `null`이고, 시드 리포트에만 AI 초안이 들어 있다.
+
+에러: 없거나 남의 리포트 `REPORT404_1`.
+
+### 코멘트 저장 · 확인 — `PUT /api/v1/reports/{reportId}/comment` (`200`, `REPORT200_3`)
+
+코멘트를 저장하고 확인 처리한다. 출처는 `TEACHER`가 된다. 응답은 코멘트 조회와 같다.
+
+```json
+{ "text": "이번 달 서아는 …" }
+```
+
+| 필드 | 타입 | 필수 | 제약 |
+| --- | --- | --- | --- |
+| `text` | String | O | 공백 불가, 1000자 이하 |
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `text` 공백 · 1000자 초과 (`result.text`에 메시지) | 400 | `COMMON400` |
+| 없거나 남의 리포트 | 404 | `REPORT404_1` |
+| 이미 보낸 리포트 (발송 후 내용 고정) | 409 | `REPORT409_1` |
+
+### 발송 확인 — `POST /api/v1/reports/{reportId}/send` (`200`, `REPORT200_4`)
+
+프론트가 카카오톡 공유 창을 띄운 **뒤** 호출한다. 리포트를 `SENT`로 바꾸고 발송 방법은 `KAKAO_SHARE`로 남긴다. 요청 본문 없음. 발송 기록(link_shares) · 웹훅은 UT 이후 공유 API와 함께.
+
+```json
+{ "reportId": 21, "status": "SENT", "sentAt": "2026-10-01T09:20:00" }
+```
+
+- 이미 `SENT`면 성공으로 응답하고 `sentAt`은 첫 발송 시각 그대로 (공유를 다시 한 경우).
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 없거나 남의 리포트 | 404 | `REPORT404_1` |
+| 코멘트 확인 전 (`reviewed: false`) | 409 | `REPORT409_2` |
 
 ---
 

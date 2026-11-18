@@ -739,7 +739,8 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 정산 리포트 구현 메모 (#27, 위 표보다 우선)
 
-- 지금 만든 컬럼은 요약 · 진도 표뿐이에요. `settlement_reports`는 id · tutoring_id · cycle_id(UNIQUE) · 회차 수 3종 · 수행률 2종 · 이해도 3종 · status · created_at / updated_at이에요. 코멘트 · AI(`ai_status` 포함) · 발송 컬럼과 INDEX(status, scheduled_at)는 해당 기능과 함께 추가해요. 그래서 `SettlementReportCreator` 계약의 ‘ai_status = PENDING’은 아직 해당이 없어요.
+- 지금 만든 컬럼은 요약 · 진도 표와 코멘트 · 발송 확인이에요. `settlement_reports`는 id · tutoring_id · cycle_id(UNIQUE) · 회차 수 3종 · 수행률 2종 · 이해도 3종 · status · comment · comment_source · comment_reviewed_at · delivery_method · sent_at · created_at / updated_at이에요. AI 컬럼(`ai_draft_comment` · `ai_softened_sentences` · `ai_status` · `ai_generated_at`) · `scheduled_at`과 INDEX(status, scheduled_at)는 해당 기능과 함께 추가해요. 그래서 `SettlementReportCreator` 계약의 ‘ai_status = PENDING’은 아직 해당이 없어요.
+- 코멘트 · 발송 (#43, UT용): 선생님이 코멘트를 저장하면 comment_source = TEACHER, comment_reviewed_at = 지금. 발송 확인은 comment_reviewed_at이 있어야 하고 status = SENT, delivery_method = KAKAO_SHARE, sent_at = 지금(이미 SENT면 그대로). SENT 뒤에는 코멘트를 고칠 수 없어요. 코멘트 저장 · 발송 확인은 리포트 행을 잠근 뒤(SELECT … FOR UPDATE, 과외는 잠그지 않음) 바꿔서 서로 덮어쓰지 않아요. 발송 기록(link_shares)은 아직 만들지 않아요. UT 시드는 리포트에 AI 초안(comment_source = AI_DRAFT, 미확인)을 넣어요.
 - 통계는 정산 시점에 한 번 계산하고 다시 계산하지 않아요.
   - `completed_count` · `canceled_count`: `CycleSessionReader.countRecognized` · `canceledIn` 크기 (정산 판단과 같은 기준).
   - `target_count`: 이 사이클 번호에 적용된 정책의 정산 회차.

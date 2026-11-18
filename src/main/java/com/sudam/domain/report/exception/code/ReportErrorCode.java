@@ -11,6 +11,9 @@ public enum ReportErrorCode implements BaseErrorCode {
 
     // 다른 선생님의 리포트도 같은 코드로 응답해 리포트 ID가 있는지조차 드러내지 않는다.
     REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "REPORT404_1", "정산 리포트를 찾을 수 없습니다."),
+    // 발송한 리포트는 내용이 고정된다 (sent_at 이후 수정 불가).
+    REPORT_ALREADY_SENT(HttpStatus.CONFLICT, "REPORT409_1", "이미 보낸 정산 리포트는 고칠 수 없습니다."),
+    COMMENT_NOT_REVIEWED(HttpStatus.CONFLICT, "REPORT409_2", "코멘트를 확인한 뒤에 보낼 수 있습니다."),
     ;
 
     private final HttpStatus status;
