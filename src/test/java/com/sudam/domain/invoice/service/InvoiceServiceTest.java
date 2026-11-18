@@ -456,6 +456,53 @@ class InvoiceServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("renotify")
+    class Renotify {
+
+        @Test
+        @DisplayName("입금 대기 청구에 다시 보내면 지금 시각이 남고 응답 한 줄의 아래 줄이 RESENT다")
+        void 입금_대기_다시_보냄() {
+            // given
+            Invoice invoice = invoice(10L, tutoring(100L, TEACHER_ID), 360_000, NOV_10);
+            set(invoice, "notifiedAt", NOV_10);
+            stubConfirm(invoice);
+
+            // when
+            InvoiceItemResponse item = invoiceService.renotify(TEACHER_ID, 10L);
+
+            // then
+            assertThat(invoice.getRenotifiedAt()).isEqualTo(NOW);
+            assertThat(item.invoiceId()).isEqualTo(10L);
+            assertThat(item.statusLine().type()).isEqualTo(InvoiceStatusLineType.RESENT);
+            assertThat(item.statusLine().at()).isEqualTo(NOW);
+        }
+
+        @Test
+        @DisplayName("다른 선생님의 청구면 INVOICE404_1이고 시각을 남기지 않는다")
+        void 다른_선생님_청구() {
+            // given
+            Invoice invoice = invoice(10L, tutoring(100L, OTHER_TEACHER_ID), 360_000, NOV_10);
+            given(invoiceRepository.findByIdForUpdate(10L)).willReturn(Optional.of(invoice));
+
+            // when & then
+            assertErrorCode(() -> invoiceService.renotify(TEACHER_ID, 10L), "INVOICE404_1");
+            assertThat(invoice.getRenotifiedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("이미 입금 완료면 INVOICE409_3이다")
+        void 완납() {
+            // given
+            Invoice invoice = invoice(10L, tutoring(100L, TEACHER_ID), 360_000, NOV_10);
+            invoice.recordPayment(null, NOV_10);
+            given(invoiceRepository.findByIdForUpdate(10L)).willReturn(Optional.of(invoice));
+
+            // when & then
+            assertErrorCode(() -> invoiceService.renotify(TEACHER_ID, 10L), "INVOICE409_3");
+        }
+    }
+
     private void stubList(List<Invoice> announced, List<Invoice> unsettled, List<TutoringSetting> settings) {
         given(invoiceRepository.findAllOfTeacherAnnouncedBetween(eq(TEACHER_ID), any(), any())).willReturn(announced);
         given(invoiceRepository.findAllOfTeacherByStatusIn(eq(TEACHER_ID), anyCollection())).willReturn(unsettled);
