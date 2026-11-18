@@ -4,10 +4,12 @@ import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.entity.InvoicePayment;
 import com.sudam.domain.invoice.enums.InvoiceStatus;
 import com.sudam.domain.invoice.enums.InvoiceStatusLineType;
+import com.sudam.domain.participant.dto.response.ParentResponse;
 import com.sudam.domain.tutoring.entity.Tutoring;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * 수입 탭 교육비 한 줄. 입금 현황 목록(GET /invoices)과 입금 확인 응답(POST /invoices/{id}/payments)이
@@ -26,6 +28,7 @@ import java.util.Comparator;
  * @param reportId             함께 보낸 정산 리포트 ID
  * @param notifiedAt           교육비 안내 첫 발송 시각
  * @param createdAt            청구 생성 시각
+ * @param parents              카톡 공유를 받을 수 있는 학부모 (공유 정보 생성의 participantId)
  */
 public record InvoiceItemResponse(
         Long invoiceId,
@@ -40,7 +43,8 @@ public record InvoiceItemResponse(
         StatusLine statusLine,
         Long reportId,
         LocalDateTime notifiedAt,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        List<ParentResponse> parents
 ) {
 
     // 확인 대기 → 입금 대기 → 일부 입금 → 입금 완료, 같은 상태는 안내일(없으면 생성일) 최신순 · ID 큰 순.
@@ -54,16 +58,18 @@ public record InvoiceItemResponse(
      * @param invoice               변환할 청구
      * @param previousUnpaidAmount  같은 과외의 앞선 청구 잔액 합 (서비스가 계산)
      * @param unpaidReminderEnabled 과외 공유 설정의 미입금 알림 켜짐 여부
+     * @param parents               카톡 공유를 받을 수 있는 학부모 (입금 안내 다시 보내기의 받는 사람)
      * @return InvoiceItemResponse
      */
-    public static InvoiceItemResponse of(Invoice invoice, int previousUnpaidAmount, boolean unpaidReminderEnabled) {
+    public static InvoiceItemResponse of(Invoice invoice, int previousUnpaidAmount, boolean unpaidReminderEnabled,
+                                         List<ParentResponse> parents) {
         Tutoring tutoring = invoice.getTutoring();
         int paidAmount = invoice.paidAmount();
         return new InvoiceItemResponse(
                 invoice.getId(),
                 tutoring.getId(),
                 tutoring.getStudentName(),
-                nameOf(invoice),
+                invoice.displayName(),
                 invoice.getAmount(),
                 paidAmount,
                 Math.max(0, invoice.getAmount() - paidAmount),
@@ -72,19 +78,9 @@ public record InvoiceItemResponse(
                 StatusLine.of(invoice, unpaidReminderEnabled),
                 invoice.getReportId(),
                 invoice.getNotifiedAt(),
-                invoice.getCreatedAt()
+                invoice.getCreatedAt(),
+                List.copyOf(parents)
         );
-    }
-
-    // 수입 탭 이름 (6.1.2). N은 청구 스냅샷의 정산 회차다.
-    private static String nameOf(Invoice invoice) {
-        int count = invoice.getSnapshot().settlementSessionCount();
-        return switch (invoice.getKind()) {
-            case FIRST -> "첫 " + count + "회차";
-            case NEXT -> "다음 " + count + "회차";
-            case CURRENT -> "이번 " + count + "회차";
-            case FINAL -> "마지막 정산";
-        };
     }
 
     private static int statusRank(InvoiceStatus status) {

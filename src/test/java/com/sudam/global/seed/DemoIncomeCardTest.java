@@ -60,7 +60,7 @@ class DemoIncomeCardTest {
                     Participant parent = Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000001");
                     Invoice invoice = card.issueInvoice(policy, 2L, null, CYCLE1_START, parent, NOW);
                     invoices.add(invoice);
-                    return InvoiceItemResponse.of(invoice, 0, card.unpaidReminderEnabled());
+                    return InvoiceItemResponse.of(invoice, 0, card.unpaidReminderEnabled(), List.of());
                 })
                 .toList();
         response = InvoiceListResponse.from(items);

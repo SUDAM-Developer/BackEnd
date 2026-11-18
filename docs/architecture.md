@@ -66,6 +66,10 @@ com.sudam
 │   │   ├── enums                       # InvoiceKind, InvoiceStatus, AdjustedBy
 │   │   ├── repository                  # InvoiceRepository는 잠금 조회 findByIdForUpdate 제공
 │   │   └── exception                   # InvoiceException, code/InvoiceErrorCode
+│   ├── share                           # 카카오톡 공유 기록(link_shares). POST /shares가 메시지를 만들고 REQUESTED를 남긴다
+│   │   ├── service                     # ShareService(공유 정보 생성), LinkShareRecorder(확인 API가 부르는 SENT 처리, MANDATORY), ShareLinkFactory(링크 URL)
+│   │   ├── entity/LinkShare.java       # request(받는 사람, 종류, 원인)
+│   │   └── exception                   # ShareException, code/ShareErrorCode · ShareSuccessCode
 │   └── settlement                      # 정산 실행 (컨트롤러 없음. 기록 저장이 같은 트랜잭션에서 호출)
 │       ├── service                     # SettlementService.settleIfReached (MANDATORY), InvoiceAmountCalculator(순수 함수)
 │       ├── dto/SettlementResult        # 기록 저장 응답의 settlement { settled, cycleId, reportId, invoiceId }
@@ -97,9 +101,10 @@ com.sudam
 | AUTH | 200_1 ~ 200_2 | 400_1, 401_1 ~ 401_6 |
 | USER | 200_1 ~ 200_4, 201_1 ~ 201_2 | 400_1 ~ 400_2, 404_1 ~ 404_2, 409_1 |
 | INVOICE | 200_1 ~ 200_4, 201_1 | 404_1, 409_1 ~ 409_5 |
-| REPORT | 200_1 ~ 200_7 | 404_1, 409_1 ~ 409_2 |
+| REPORT | 200_1 ~ 200_6 | 404_1, 409_1 ~ 409_2 |
 | RECORD | 201_1 | 400_1 ~ 400_3, 404_1 ~ 404_3, 409_1 ~ 409_2 |
 | PARTICIPANT | — | 404_1 (학부모 링크) |
+| SHARE | 201_1 | 400_1 ~ 400_2, 404_1, 409_1 |
 | SETTLEMENT | — | 500_1 |
 
 ## 요청 처리 흐름
@@ -210,9 +215,9 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 1. 부팅 로그의 토큰을 복사하거나(기본 계정) 카카오로 로그인한 뒤 Swagger(`/swagger-ui.html`) **Authorize**에 넣는다. 부팅 로그에 김서아 `tutoringId` · 오늘 `scheduleId` · `originalDate`가 함께 찍힌다.
 2. `GET /api/v1/invoices` → 요약 1,200,000 / 400,000 / 800,000, 카드 4장(박지후 → 윤서아 → 이도윤 → 김하린).
    - 각 청구의 `reportId`로 `GET /api/v1/reports/{reportId}`와 `GET /api/v1/reports/{reportId}/invoice`를 열 수 있다.
-   - 코멘트 · 발송 (박지후): `GET .../comment`(AI 초안, 확인 전) → `POST .../send`는 `REPORT409_2` → `PUT .../comment`(`text`) → `GET .../recipients`(공유 URL) → `POST .../send` → `SENT`.
-   - 학부모 링크: `recipients`의 `shareUrl` 토큰으로 `GET /api/v1/links/{token}/reports/{reportId}`(로그인 없음) → 목록의 `viewedAt`이 채워진다.
-   - 입금 안내 다시 보내기 (윤서아): `POST /api/v1/invoices/{invoiceId}/renotifications` → 카드 아래 줄 `RESENT`.
+   - 코멘트 · 발송 (박지후): `GET .../comment`(AI 초안, 확인 전) → `POST .../send`는 `REPORT409_2` → `PUT .../comment`(`text`) → `POST /api/v1/shares`(`SETTLEMENT_REPORT`, 리포트 ID, 리포트 조회 `parents`의 학부모 참여자 ID → 카톡 메시지 · `url`) → `POST .../send` → `SENT` (공유 기록도 `SENT`).
+   - 학부모 링크: `/shares` 응답 `url`의 토큰으로 `GET /api/v1/links/{token}/reports/{reportId}`(로그인 없음) → 목록의 `viewedAt`이 채워진다.
+   - 입금 안내 다시 보내기 (윤서아): `POST /api/v1/shares`(`PAYMENT_RESEND`, 청구 ID, 카드 `parents`의 학부모 ID) → `POST /api/v1/invoices/{invoiceId}/renotifications` → 카드 아래 줄 `RESENT`.
 3. `POST /api/v1/tutorings/{김서아 tutoringId}/records` (`scheduleId` = 오늘 요일 일정, `originalDate` = 오늘, 교재 진도 15~16) → 응답 `noInCycle: 8`, `settlement.settled = true`, `reportId` · `invoiceId`.
 4. `GET /api/v1/reports/{reportId}` → 김서아 8/8 리포트. 실제 정산으로 만든 리포트라 코멘트가 없다(`comment: null`). 보내려면 먼저 `PUT .../comment`로 작성한다.
 5. `GET /api/v1/invoices` → 1,560,000 / 400,000 / 1,160,000, 카드 5장(김서아 '다음 8회차' 360,000이 입금 대기로 추가).

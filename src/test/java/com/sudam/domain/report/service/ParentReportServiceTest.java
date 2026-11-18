@@ -1,6 +1,10 @@
 package com.sudam.domain.report.service;
 
 import com.sudam.domain.cycle.entity.Cycle;
+import com.sudam.domain.invoice.entity.Invoice;
+import com.sudam.domain.invoice.entity.InvoiceSnapshot;
+import com.sudam.domain.invoice.enums.InvoiceKind;
+import com.sudam.domain.invoice.repository.InvoiceRepository;
 import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.participant.exception.ParticipantException;
@@ -13,6 +17,8 @@ import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.repository.SettlementReportRepository;
 import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.tutoring.entity.Tutoring;
+import com.sudam.domain.tutoring.entity.TutoringPolicy;
+import com.sudam.domain.tutoring.enums.PaymentTiming;
 import com.sudam.domain.user.entity.TeacherProfile;
 import com.sudam.domain.user.entity.User;
 import com.sudam.domain.user.enums.Provider;
@@ -50,24 +56,29 @@ class ParentReportServiceTest {
     private static final String TOKEN = "mother-token";
     private static final Long REPORT_ID = 21L;
     private static final Long PARENT_ID = 31L;
+    private static final Long TEACHER_ID = 1L;
 
     @Mock private ParticipantLinkService participantLinkService;
     @Mock private SettlementReportRepository settlementReportRepository;
     @Mock private SettlementReportViewRepository settlementReportViewRepository;
+    @Mock private InvoiceRepository invoiceRepository;
     @Mock private ReportService reportService;
 
     private ParentReportService parentReportService;
+    private Tutoring tutoring;
     private Participant parent;
     private SettlementReport report;
 
     @BeforeEach
     void setUp() {
         parentReportService = new ParentReportService(participantLinkService, settlementReportRepository,
-                settlementReportViewRepository, reportService, Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL));
+                settlementReportViewRepository, invoiceRepository, reportService,
+                Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL));
 
-        TeacherProfile teacher = TeacherProfile.create(
-                User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null);
-        Tutoring tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
+        TeacherProfile teacher = withId(TeacherProfile.create(
+                User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null),
+                TEACHER_ID);
+        tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
                 .studentName("윤서아").gradeLevel(9).gradeSchoolYear(2026).build(), 10L);
         parent = withId(Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000002"), PARENT_ID);
         report = withId(SettlementReport.builder().tutoring(tutoring)
@@ -77,17 +88,19 @@ class ParentReportServiceTest {
     }
 
     @Test
-    @DisplayName("보낸 리포트면 요약 · 코멘트 · 선생님 이름을 돌려주고 지금 시각으로 첫 열람을 남긴다")
+    @DisplayName("보낸 리포트면 요약 · 코멘트 · 함께 보낸 교육비 안내(계좌 끝 4자리) · 선생님 이름을 돌려주고 첫 열람을 남긴다")
     void 보낸_리포트_열기() {
         // given
         report.reviewComment("이번 달 서아는 …", NOW.minusHours(3));
         report.markSent(NOW.minusHours(3));
         ReportResponse summary = new ReportResponse(REPORT_ID, report.getStatus(), "윤서아",
                 new ReportResponse.Period(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)),
-                null, List.of(), null);
+                null, List.of(), null, List.of());
         given(participantLinkService.resolveParent(TOKEN)).willReturn(parent);
         given(settlementReportRepository.findWithTutoringById(REPORT_ID)).willReturn(Optional.of(report));
-        given(reportService.toResponse(report)).willReturn(summary);
+        given(reportService.toResponse(report, List.of())).willReturn(summary);
+        given(invoiceRepository.findActiveByReportIdAndTeacherId(REPORT_ID, TEACHER_ID))
+                .willReturn(Optional.of(invoice()));
 
         // when
         ParentReportResponse response = parentReportService.get(TOKEN, REPORT_ID);
@@ -95,9 +108,30 @@ class ParentReportServiceTest {
         // then
         assertThat(response.report()).isSameAs(summary);
         assertThat(response.comment()).isEqualTo("이번 달 서아는 …");
+        assertThat(response.invoice().amount()).isEqualTo(360_000);
+        assertThat(response.invoice().bankName()).isEqualTo("국민은행");
+        assertThat(response.invoice().accountLast4()).isEqualTo("1492");
+        assertThat(response.invoice().accountHolder()).isEqualTo("한서윤");
         assertThat(response.teacherName()).isEqualTo("한서윤");
         assertThat(response.sentAt()).isEqualTo(NOW.minusHours(3));
         then(settlementReportViewRepository).should().insertFirstView(REPORT_ID, PARENT_ID, NOW);
+    }
+
+    @Test
+    @DisplayName("함께 보낸 청구가 없으면 교육비 안내는 null이다")
+    void 청구_없는_리포트() {
+        // given
+        report.reviewComment("코멘트", NOW.minusHours(3));
+        report.markSent(NOW.minusHours(3));
+        given(participantLinkService.resolveParent(TOKEN)).willReturn(parent);
+        given(settlementReportRepository.findWithTutoringById(REPORT_ID)).willReturn(Optional.of(report));
+        given(invoiceRepository.findActiveByReportIdAndTeacherId(REPORT_ID, TEACHER_ID)).willReturn(Optional.empty());
+
+        // when
+        ParentReportResponse response = parentReportService.get(TOKEN, REPORT_ID);
+
+        // then
+        assertThat(response.invoice()).isNull();
     }
 
     @Test
@@ -146,6 +180,14 @@ class ParentReportServiceTest {
                 .isInstanceOf(ReportException.class)
                 .extracting(e -> ((ProjectException) e).getErrorCode().getCode())
                 .isEqualTo("REPORT404_1");
+    }
+
+    private Invoice invoice() {
+        TutoringPolicy policy = TutoringPolicy.builder().tutoring(tutoring).effectiveCycleNo(1)
+                .settlementSessionCnt(8).paymentTiming(PaymentTiming.PREPAID).tuitionFee(360_000)
+                .bankCode("004").bankName("국민은행").accountNumber("123456-78-901492").accountHolder("한서윤").build();
+        return Invoice.issue(policy, 2L, REPORT_ID, InvoiceKind.NEXT, 360_000,
+                InvoiceSnapshot.of(policy, 8, LocalDate.of(2026, 9, 1), List.of()));
     }
 
     private static <T> T withId(T entity, Long id) {

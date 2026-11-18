@@ -932,6 +932,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 - 발송 기록(1.2.4)은 SENT · VIEWED만 최신순. REQUESTED는 홈 할 일 ‘안 보낸 카톡’(3.2.1).
 - 같은 원인(source_type · source_id) · 같은 참여자로 새 REQUESTED가 생기면 이전 REQUESTED는 DISMISSED로 바꿔요. 공유 창을 여러 번 열어도 할 일에는 1건만 보여요.
 - 후속 처리 (웹훅과 선생님 보냈어요 모두 같음, REQUESTED → SENT로 바뀐 경우에만): SETTLEMENT_REPORT → 리포트 발송 완료, FIRST_INVOICE · PAYMENT_RESEND → invoices.notified_at · renotified_at, TIME_CHANGE → session_time_changes 적용, MAKEUP → 보강 요청 발송 확인.
+- 구현 메모 (#47, UT): 엔티티 `LinkShare`, `POST /api/v1/shares`가 `SETTLEMENT_REPORT` · `PAYMENT_RESEND`만 REQUESTED로 만들어요. 웹훅 전이라 방향이 반대예요: 선생님 확인 API(리포트 `POST /reports/{id}/send`, 입금 안내 `POST /invoices/{id}/renotifications`)가 원인 데이터를 먼저 바꾸고, 같은 트랜잭션에서 그 원인 · 종류의 REQUESTED를 SENT(sent_via = MANUAL)로 바꿔요. 공유 창 없이 확인만 눌러도 원인 데이터는 바뀌어요. chat_type · hash_chat_id는 웹훅과 함께 채워요. 시드 리셋은 이 테이블을 가장 먼저 지워요.
 
 ### notification_jobs (선생님 알림 작업)
 

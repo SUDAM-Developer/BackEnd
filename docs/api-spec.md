@@ -34,12 +34,12 @@
 | `REPORT200_3` | 200 | 정산 리포트 코멘트를 저장하고 확인했습니다. |
 | `REPORT200_4` | 200 | 정산 리포트를 보냈습니다. |
 | `REPORT200_5` | 200 | 정산 리포트 목록을 조회했습니다. |
-| `REPORT200_6` | 200 | 정산 리포트를 받을 학부모를 조회했습니다. |
-| `REPORT200_7` | 200 | 정산 리포트를 열었습니다. |
+| `REPORT200_6` | 200 | 정산 리포트를 열었습니다. |
 | `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
 | `INVOICE200_2` | 200 | 교육비 안내가 성공적으로 조회되었습니다. |
 | `INVOICE200_3` | 200 | 교육비가 성공적으로 수정되었습니다. |
 | `INVOICE200_4` | 200 | 입금 안내를 다시 보냈습니다. |
+| `SHARE201_1` | 201 | 공유 정보가 생성되었습니다. |
 | `INVOICE201_1` | 201 | 입금이 성공적으로 확인되었습니다. |
 
 공통 `COMMON200` · `COMMON201`은 도메인에 속하지 않는 응답에만 쓴다.
@@ -75,6 +75,10 @@
 | `REPORT409_1` | 409 | 이미 보낸 정산 리포트는 고칠 수 없습니다. |
 | `REPORT409_2` | 409 | 코멘트를 확인한 뒤에 보낼 수 있습니다. |
 | `PARTICIPANT404_1` | 404 | 링크가 만료되었거나 올바르지 않습니다. |
+| `SHARE400_1` | 400 | 아직 지원하지 않는 공유 종류입니다. |
+| `SHARE400_2` | 400 | 공유할 대상(sourceId)을 함께 보내 주세요. |
+| `SHARE404_1` | 404 | 받는 사람을 찾을 수 없습니다. |
+| `SHARE409_1` | 409 | 수신을 거부한 받는 사람입니다. |
 | `INVOICE404_1` | 404 | 교육비 안내를 찾을 수 없습니다. |
 | `INVOICE409_1` | 409 | 취소된 교육비 안내입니다. |
 | `INVOICE409_2` | 409 | 이미 받은 금액보다 적게 바꿀 수 없습니다. |
@@ -275,7 +279,8 @@
     { "textbookName": "수능특강 영어", "startLabel": "3강", "endLabel": "9강", "textbookStatus": "ACTIVE" },
     { "textbookName": "Grammar Zone 기본", "startLabel": "Unit 12", "endLabel": "Unit 20", "textbookStatus": "ACTIVE" }
   ],
-  "understandingLevel": "HIGH"
+  "understandingLevel": "HIGH",
+  "parents": [ { "participantId": 12, "label": "MOTHER" } ]
 }
 ```
 
@@ -283,6 +288,7 @@
 - `period`: 사이클 인정 회차의 첫 · 마지막 수업일. `canceledCount`: 그 기간의 휴강 수.
 - `homeworkRate`: (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수, % 반올림. 결과가 없으면 `null`. `prevHomeworkRate`: 직전 사이클 리포트 값, 없으면 `null`.
 - `understandingLevel`: 이해도 수준 `HIGH` / `MEDIUM` / `LOW`. `understanding` 횟수로 조회 때 계산한다. 상 3 · 중 2 · 하 1점 가중평균이 2.5 이상이면 `HIGH`, 1.5 이상이면 `MEDIUM`, 그 아래 `LOW`. 이해도 기록이 0건이면 `null`.
+- `parents`: 카톡 공유를 받을 수 있는 학부모(삭제되지 않았고 링크 토큰이 있음, 등록 순). `participantId`를 공유 정보 생성(`POST /shares`)의 받는 사람으로 쓴다. `label`은 `MOTHER` 어머님 / `FATHER` 아버님 / `GUARDIAN` 보호자님. 학부모 링크 화면(`/links/...`)에서는 `[]`.
 - `progress`: 교재 ID 순, 사이클 첫 회차 시작 ~ 마지막 회차 끝 진도. 라벨 `Unit 12` · `Chapter 3` · `3단원` · `45p` · `3회`, 직접 입력 단위는 숫자 + 단위(`9강`). 진도 기록이 없는 교재는 빠진다.
 
 에러: `reportId`가 숫자가 아님 `COMMON400` / 없거나 남의 리포트 `REPORT404_1`.
@@ -328,7 +334,7 @@
 
 ### 발송 확인 — `POST /api/v1/reports/{reportId}/send` (`200`, `REPORT200_4`)
 
-프론트가 카카오톡 공유 창을 띄운 **뒤** 호출한다. 리포트를 `SENT`로 바꾸고 발송 방법은 `KAKAO_SHARE`로 남긴다. 요청 본문 없음. 발송 기록(link_shares) · 웹훅은 UT 이후 공유 API와 함께.
+프론트가 카카오톡 공유 창을 띄운 **뒤** 호출한다. 리포트를 `SENT`로 바꾸고 발송 방법은 `KAKAO_SHARE`로 남긴다. 요청 본문 없음. 같은 리포트로 만든 REQUESTED 공유(`POST /shares`, `SETTLEMENT_REPORT`)도 함께 `SENT`(`sent_via: MANUAL`)로 바꾼다. 카카오 웹훅은 UT 이후.
 
 ```json
 { "reportId": 21, "status": "SENT", "sentAt": "2026-10-01T09:20:00" }
@@ -340,20 +346,6 @@
 | --- | --- | --- |
 | 없거나 남의 리포트 | 404 | `REPORT404_1` |
 | 코멘트 확인 전 (`reviewed: false`) | 409 | `REPORT409_2` |
-
-### 받는 사람 조회 — `GET /api/v1/reports/{reportId}/recipients` (`200`, `REPORT200_6`)
-
-리포트를 받을 학부모와 각자의 학부모 리포트 화면 URL. 프론트가 카카오톡 공유 메시지의 링크로 넣는다. 대상은 그 과외의 삭제되지 않은 학부모 중 링크 토큰이 있는 사람, 등록 순.
-
-```json
-{ "items": [ { "participantId": 31, "label": "MOTHER", "shareUrl": "https://sudam.app/l/{토큰}/reports/21" } ] }
-```
-
-- `label`: `MOTHER` 어머님 / `FATHER` 아버님 / `GUARDIAN` 보호자님.
-- `shareUrl`: 프로파일별 `app.link.report-url-template`(로컬 `http://localhost:8081/l/{token}/reports/{reportId}`, 개발 서버 `${FRONT_BASE_URL}/l/{token}/reports/{reportId}`)로 만든다. 링크는 참여자마다 하나라 토큰은 리포트와 관계없이 같다.
-- 링크를 받을 학부모가 없으면 `items`는 `[]`.
-
-에러: 없거나 남의 리포트 `REPORT404_1`.
 
 ---
 
@@ -378,7 +370,8 @@
       "invoiceId": 12, "tutoringId": 3, "studentName": "서아", "invoiceName": "이번 8회차",
       "amount": 360000, "paidAmount": 120000, "balance": 240000, "previousUnpaidAmount": 0,
       "status": "PARTIAL", "statusLine": { "type": "PARTIAL_PAID", "at": "2026-11-15T20:00:00" },
-      "reportId": 5, "notifiedAt": "2026-11-10T19:02:11", "createdAt": "2026-11-10T18:40:03"
+      "reportId": 5, "notifiedAt": "2026-11-10T19:02:11", "createdAt": "2026-11-10T18:40:03",
+      "parents": [ { "participantId": 12, "label": "MOTHER" } ]
     }
   ]
 }
@@ -387,6 +380,7 @@
 - 건수와 `summary`는 `items`에서 더한다: `confirmRequestedCount` = CONFIRM_REQUESTED 수, `unpaidCount` = 미완료(PENDING · PARTIAL · CONFIRM_REQUESTED) 수, `summary`는 `amount` · `paidAmount` · `balance` 합.
 - `studentName`: 과외 삭제 시 `null`. `invoiceName`: FIRST `첫 N회차` / NEXT `다음 N회차` / CURRENT `이번 N회차` / FINAL `마지막 정산` (N = `settlementSessionCount`).
 - `reportId`: 함께 보낸 리포트, 선불 첫 청구 등은 `null`. `notifiedAt`: 첫 안내 시각, 안 보냈으면 `null`.
+- `parents`: 그 과외의 카톡 공유를 받을 수 있는 학부모. 입금 안내 다시 보내기(`POST /shares`, `PAYMENT_RESEND`)의 받는 사람. 형식은 리포트 조회와 같다. 입금 확인 · 다시 보내기 확인 응답의 `item`에도 있다.
 - `statusLine` (위에서 먼저 맞는 것, 계산값):
 
 | 순서 | `type` | 조건 | `at` |
@@ -422,7 +416,7 @@
 
 ### 입금 안내 다시 보내기 확인 — `POST /api/v1/invoices/{invoiceId}/renotifications` (`200`, `INVOICE200_4`)
 
-프론트가 [카톡으로 입금 안내 다시 보내기]의 카카오톡 공유 창을 띄운 **뒤** 호출한다. 청구 행을 잠그고 `renotified_at`을 요청 시각으로 남긴다(마지막 시각으로 덮어씀). 요청 본문 없음. 공유 기록(link_shares, `PAYMENT_RESEND`) · 웹훅은 UT 이후.
+프론트가 [카톡으로 입금 안내 다시 보내기]의 카카오톡 공유 창을 띄운 **뒤** 호출한다. 청구 행을 잠그고 `renotified_at`을 요청 시각으로 남긴다(마지막 시각으로 덮어씀). 요청 본문 없음. 같은 청구로 만든 REQUESTED 공유(`POST /shares`, `PAYMENT_RESEND`)도 함께 `SENT`(`sent_via: MANUAL`)로 바꾼다. 카카오 웹훅은 UT 이후.
 
 응답은 입금 현황 `items[]` 한 줄과 같은 형식이다. 입금 대기(PENDING)면 `statusLine`이 `{ "type": "RESENT", "at": 다시 보낸 시각 }`('카톡으로 입금 안내를 다시 보냈어요')이 된다. 확인 대기 · 일부 입금은 `statusLine` 순서상 `PARENT_CONFIRMED` · `PARTIAL_PAID`가 먼저 보인다.
 
@@ -488,27 +482,74 @@ T-14 교육비 수정 시트 [저장]. 청구 행을 잠그고(FOR UPDATE) 금�
 
 ---
 
+## 카카오톡 공유
+
+학부모 · 학생에게 가는 메시지는 모두 선생님의 카카오톡 공유로 나간다. 흐름: ① `POST /shares`로 메시지를 받고 공유 기록을 `REQUESTED`로 남긴다 → ② 프론트가 카카오 공유 창을 띄운다 → ③ 보낸 뒤 원인 데이터의 확인 API(리포트 `POST /reports/{id}/send`, 입금 안내 `POST /invoices/{id}/renotifications`)를 부르면 원인이 바뀌고 그 공유도 `SENT`(`MANUAL`)가 된다. 카카오 웹훅(`WEBHOOK`)은 UT 이후.
+
+### 공유 정보 생성 — `POST /api/v1/shares` (`201`, `SHARE201_1`)
+
+```json
+{ "kind": "SETTLEMENT_REPORT", "sourceId": 21, "participantId": 12 }
+```
+
+| 필드 | 타입 | 필수 | 설명 |
+| --- | --- | --- | --- |
+| `kind` | String | O | 공유 종류. 지금은 `SETTLEMENT_REPORT`(정산 리포트) · `PAYMENT_RESEND`(입금 안내 다시)만 지원 |
+| `sourceId` | Long | 지원 종류는 O | `SETTLEMENT_REPORT` = 리포트 ID, `PAYMENT_RESEND` = 청구 ID |
+| `participantId` | Long | O | 받는 사람 (그 과외의 학부모). 리포트 조회 · 입금 현황의 `parents[].participantId` |
+
+```json
+{
+  "shareId": 501,
+  "url": "https://sudam.app/l/{토큰}/reports/21",
+  "title": "윤서아 학생 8회차 정산 리포트",
+  "description": "수업 8/8회 · 숙제 수행률 88% · 다음 8회차 교육비 360,000원",
+  "buttonTitle": "링크로 보기"
+}
+```
+
+- `url`: 받는 사람의 링크 화면. `{app.link.base-url}/l/{token}/reports/{reportId}`(리포트) · `/l/{token}/invoices/{invoiceId}`(교육비). base-url은 로컬 `http://localhost:8081`, 개발 서버 `${FRONT_BASE_URL}`. 토큰은 참여자마다 하나다.
+- `SETTLEMENT_REPORT`: 제목 `{학생} 학생 {정산 회차}회차 정산 리포트`, 설명 `수업 {진행}/{정산}회 · 숙제 수행률 {n}% · {청구 이름} 교육비 {금액}원`(숙제 결과 · 함께 보낸 청구가 없으면 그 부분은 뺀다), 버튼 `링크로 보기`. **코멘트를 확인한 리포트만** 공유할 수 있다(발송 확인과 같은 규칙). 이미 보낸 리포트도 다시 공유할 수 있다.
+- `PAYMENT_RESEND`: 제목 `{학생} 학생 교육비 안내`, 설명 `{청구 이름} 교육비 {금액}원`(일부 입금이면 ` · 남은 금액 {잔액}원`), 버튼 `교육비 보기`. 학부모 교육비 화면 API는 아직 없다.
+- 같은 원인 · 같은 받는 사람의 이전 `REQUESTED`는 `DISMISSED`로 바뀐다 (공유 창을 여러 번 열어도 할 일은 1건).
+- 받는 사람: 그 과외의 삭제되지 않은 학부모이고 링크 토큰이 있어야 한다. 받지 않기(`receive_method = NONE`) · 수신 거부(`notification_consent = REJECTED`)면 보낼 수 없다. 초대 수락 대기(`PENDING`)는 보낼 수 있다.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `kind` · `participantId` 없음(`result`에 필드별 메시지), 없는 `kind` 값, 깨진 JSON | 400 | `COMMON400` |
+| 아직 지원하지 않는 종류 / `sourceId` 없음 | 400 | `SHARE400_1` / `SHARE400_2` |
+| 받는 사람이 없음 · 다른 과외 · 삭제됨 · 학부모 아님 · 링크 없음 | 404 | `SHARE404_1` |
+| 리포트 없음 · 남의 리포트 / 청구 없음 · 남의 청구 | 404 | `REPORT404_1` / `INVOICE404_1` |
+| 코멘트 확인 전 리포트 | 409 | `REPORT409_2` |
+| 취소된 청구 / 입금 완료된 청구 | 409 | `INVOICE409_1` / `INVOICE409_3` |
+| 수신 거부한 받는 사람 | 409 | `SHARE409_1` |
+
+---
+
 ## 학부모 링크
 
 학부모가 카카오톡 메시지의 링크로 여는 화면용 API. **로그인 없이** 경로의 참여자 링크 토큰(`participants.link_token`)으로 본인을 확인한다 (`SecurityConfig.allowUris`의 `/api/v1/links/**`). `Authorization` 헤더를 보내지 않는다.
 
 링크 확인 (ERD 9.1.1): 토큰으로 참여자 조회 → 삭제된 참여자 · 삭제된 과외 · 만료(`link_expires_at` 지남, 진행 중 과외는 만료 없음) · 학부모가 아님이면 모두 `PARTICIPANT404_1`. 어느 경우인지 구분해 알려 주지 않는다. 첫 입장 수신 동의(9.1.2) · 없는 토큰 반복 요청 제한은 아직 없다.
 
-### 학부모 정산 리포트 열기 — `GET /api/v1/links/{token}/reports/{reportId}` (`200`, `REPORT200_7`)
+### 학부모 정산 리포트 열기 — `GET /api/v1/links/{token}/reports/{reportId}` (`200`, `REPORT200_6`)
 
 그 학부모 과외의 **보낸(SENT)** 리포트만 열린다. 처음 열면 `settlement_report_views`에 첫 열람 시각을 남겨 선생님 리포트 목록의 `viewedAt`에 나타난다. 다시 열어도 첫 열람 시각은 바뀌지 않는다.
 
 ```json
 {
-  "report": { "reportId": 21, "status": "SENT", "studentName": "윤서아", "period": { … }, "stats": { … }, "progress": [ … ], "understandingLevel": "MEDIUM" },
+  "report": { "reportId": 21, "status": "SENT", "studentName": "윤서아", "period": { … }, "stats": { … }, "progress": [ … ], "understandingLevel": "MEDIUM", "parents": [] },
   "comment": "이번 달 서아는 …",
+  "invoice": { "invoiceId": 2, "paymentTiming": "PREPAID", "settlementSessionCnt": 8, "amount": 360000, "recognizedCount": 8,
+               "bankCode": "004", "bankName": "국민은행", "accountLast4": "1492", "accountHolder": "한서윤", … },
   "teacherName": "한서윤",
   "sentAt": "2026-10-01T09:20:00"
 }
 ```
 
-- `report`: 선생님 `GET /reports/{reportId}`와 같은 형식.
-- 교육비 안내(금액 · 입금 계좌)는 아직 담지 않는다.
+- `report`: 선생님 `GET /reports/{reportId}`와 같은 형식이고 `parents`는 `[]`.
+- `invoice`: 리포트와 함께 보낸 교육비 안내(취소되지 않은 청구). 선생님 `GET /reports/{reportId}/invoice`와 같은 형식이다. 리포트 화면이라 계좌번호는 **끝 4자리만** 담는다(ERD: 전체 번호는 학부모 교육비 화면의 [계좌 복사]에만). 함께 보낸 청구가 없으면 `null`.
+- 응답은 DTO로만 만든다. 코멘트 출처 · 확인 시각 · 발송 방법 같은 선생님용 값은 담지 않는다.
 
 | 상황 | HTTP | code |
 | --- | --- | --- |

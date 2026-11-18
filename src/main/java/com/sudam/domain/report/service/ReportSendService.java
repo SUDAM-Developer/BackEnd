@@ -5,6 +5,9 @@ import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.exception.code.ReportErrorCode;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.share.enums.ShareKind;
+import com.sudam.domain.share.enums.ShareSourceType;
+import com.sudam.domain.share.service.LinkShareRecorder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,7 +17,7 @@ import java.time.LocalDateTime;
 
 /**
  * 정산 리포트 발송 확인 서비스. 프론트가 카카오톡 공유 창을 띄운 뒤 호출한다.
- * 발송 기록(link_shares) · 웹훅은 UT 이후 공유 API와 함께 붙인다.
+ * 공유 정보 생성(POST /shares)이 남긴 REQUESTED 공유도 여기서 SENT로 바꾼다. 카카오 웹훅은 UT 이후.
  */
 @Service
 @RequiredArgsConstructor
@@ -22,6 +25,7 @@ import java.time.LocalDateTime;
 public class ReportSendService {
 
     private final SettlementReportRepository settlementReportRepository;
+    private final LinkShareRecorder linkShareRecorder;
     private final Clock clock;
 
     /***
@@ -38,7 +42,10 @@ public class ReportSendService {
         SettlementReport report = settlementReportRepository.findByIdForUpdate(reportId)
                 .filter(found -> found.getTutoring().getTeacher().getId().equals(teacherId))
                 .orElseThrow(() -> new ReportException(ReportErrorCode.REPORT_NOT_FOUND));
-        report.markSent(LocalDateTime.now(clock));
+        LocalDateTime now = LocalDateTime.now(clock);
+        report.markSent(now);
+        // 공유 정보를 만들 때 남긴 REQUESTED 공유도 보낸 것으로 바꾼다 (웹훅 전에는 이 확인이 발송 증거다).
+        linkShareRecorder.markSentByTeacher(ShareKind.SETTLEMENT_REPORT, ShareSourceType.REPORT, reportId, now);
         return ReportSendResponse.from(report);
     }
 }
