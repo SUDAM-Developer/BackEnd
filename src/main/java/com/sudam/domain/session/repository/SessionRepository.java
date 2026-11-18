@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +29,15 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     // 사이클 인정 회차의 첫 날짜. 인정 회차가 없으면 빈 값
     @Query("select min(s.sessionDate) from Session s where s.cycle.id = :cycleId and s.isRecognized = true")
     Optional<LocalDate> findFirstRecognizedDate(@Param("cycleId") Long cycleId);
+
+    // 여러 사이클의 인정 회차 첫 날짜를 한 쿼리로 모은다 (리포트 목록의 정산 월). 인정 회차가 없는 사이클은 결과에 없다.
+    @Query("""
+            select new com.sudam.domain.session.repository.CycleFirstRecognizedDate(s.cycle.id, min(s.sessionDate))
+            from Session s
+            where s.cycle.id in :cycleIds and s.isRecognized = true
+            group by s.cycle.id
+            """)
+    List<CycleFirstRecognizedDate> findFirstRecognizedDates(@Param("cycleIds") Collection<Long> cycleIds);
 
     // 사이클 인정 회차의 마지막 날짜. 인정 회차가 없으면 빈 값
     @Query("select max(s.sessionDate) from Session s where s.cycle.id = :cycleId and s.isRecognized = true")

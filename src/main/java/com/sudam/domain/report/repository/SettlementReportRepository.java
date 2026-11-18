@@ -19,9 +19,10 @@ public interface SettlementReportRepository extends JpaRepository<SettlementRepo
     @Query("select r from SettlementReport r join fetch r.tutoring where r.id = :reportId")
     Optional<SettlementReport> findWithTutoringById(@Param("reportId") Long reportId);
 
-    // 선생님의 삭제되지 않은 과외(종료 포함)에서 만든 리포트, 최근에 만든 순. 목록에 학생 이름을 쓰므로 과외를 함께 가져온다.
+    // 선생님의 삭제되지 않은 과외(종료 포함)에서 만든 리포트, 최근에 만든 순.
+    // 목록에 학생 이름(과외)과 정산 월의 기준 시각(사이클 시작)을 쓰므로 둘 다 함께 가져온다.
     @Query("""
-            select r from SettlementReport r join fetch r.tutoring t
+            select r from SettlementReport r join fetch r.tutoring t join fetch r.cycle
             where t.teacher.id = :teacherId
               and t.deletedAt is null
             order by r.id desc

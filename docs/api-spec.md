@@ -232,17 +232,18 @@
 {
   "items": [
     {
-      "reportId": 22, "tutoringId": 4, "studentName": "박지후",
+      "reportId": 22, "tutoringId": 4, "studentName": "박지후", "settlementMonth": "2026-09",
       "status": "SENT", "sentAt": "2026-10-01T09:20:00", "createdAt": "2026-09-30T21:00:00"
     },
     {
-      "reportId": 21, "tutoringId": 3, "studentName": "윤서아",
+      "reportId": 21, "tutoringId": 3, "studentName": "윤서아", "settlementMonth": "2026-09",
       "status": "GENERATED", "sentAt": null, "createdAt": "2026-09-29T20:00:00"
     }
   ]
 }
 ```
 
+- `settlementMonth`: 정산 월(`YYYY-MM`). 사이클 첫 인정 회차의 월이다. 사이클은 직전 정산 순간에 열려 시작 시각이 앞 달일 수 있으므로 시작 시각이 아니라 첫 인정 회차를 기준으로 한다. 인정 회차가 없으면 사이클 시작월.
 - `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT` ("보냄" 표시). `sentAt`: 첫 발송 확인 시각, 보내지 않았으면 `null`.
 - `createdAt`: 리포트를 만든 시각 (정산 시각).
 - 리포트가 없으면 `items`는 `[]`.
