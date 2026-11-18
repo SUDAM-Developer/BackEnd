@@ -14,6 +14,8 @@ public enum ReportSuccessCode implements BaseSuccessCode {
     COMMENT_SAVED(HttpStatus.OK, "REPORT200_3", "정산 리포트 코멘트를 저장하고 확인했습니다."),
     REPORT_SENT(HttpStatus.OK, "REPORT200_4", "정산 리포트를 보냈습니다."),
     DELIVERIES_FOUND(HttpStatus.OK, "REPORT200_5", "정산 리포트 목록을 조회했습니다."),
+    RECIPIENTS_FOUND(HttpStatus.OK, "REPORT200_6", "정산 리포트를 받을 학부모를 조회했습니다."),
+    PARENT_REPORT_FOUND(HttpStatus.OK, "REPORT200_7", "정산 리포트를 열었습니다."),
     ;
 
     private final HttpStatus status;
