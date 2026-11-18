@@ -374,6 +374,17 @@ public class Invoice extends BaseTimeEntity {
         return amount - paidAmount();
     }
 
+    // 수입 탭 이름 (6.1.2). N은 청구 스냅샷의 정산 회차다. 수입 카드와 카카오톡 공유 메시지가 같은 이름을 쓴다.
+    public String displayName() {
+        int count = snapshot.settlementSessionCount();
+        return switch (kind) {
+            case FIRST -> "첫 " + count + "회차";
+            case NEXT -> "다음 " + count + "회차";
+            case CURRENT -> "이번 " + count + "회차";
+            case FINAL -> "마지막 정산";
+        };
+    }
+
     private void validateNotCanceled() {
         if (status == InvoiceStatus.CANCELED) {
             throw new InvoiceException(InvoiceErrorCode.INVOICE_CANCELED);

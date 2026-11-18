@@ -21,5 +21,5 @@ app:
   cors:
     allowed-origins: http://localhost:8081
   link:
-    # 학부모가 카카오톡에서 여는 리포트 화면 (프론트 경로). {token} · {reportId}를 채운다
-    report-url-template: http://localhost:8081/l/{token}/reports/{reportId}
+    # 카카오톡 공유 메시지의 링크 화면 주소 (프론트). 뒤에 /l/{token}/reports/{id} · /l/{token}/invoices/{id}를 붙인다
+    base-url: http://localhost:8081

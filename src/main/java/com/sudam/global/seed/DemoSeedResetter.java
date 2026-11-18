@@ -29,6 +29,8 @@ public class DemoSeedResetter {
 
     // FK 역순 (자식 → 부모). 테이블이 늘면 여기에 추가한다.
     private static final List<String> STATEMENTS = List.of(
+            // 공유 기록은 과외 · 참여자를 가리키고 원인(리포트 · 청구)은 ID로만 들고 있어 가장 먼저 지운다.
+            "delete from LinkShare s where s.tutoring.id in :ids",
             "delete from InvoiceAmountAdjustment a where a.invoice.id in " + INVOICE_IDS,
             "delete from InvoicePayment p where p.invoice.id in " + INVOICE_IDS,
             "delete from Invoice i where i.tutoring.id in :ids",
@@ -53,7 +55,7 @@ public class DemoSeedResetter {
     private final EntityManager entityManager;
 
     /***
-     * 함수 기능: 선생님의 과외 전부와 그 아래 데이터(일정 · 교재 · 정책 · 설정 · 참여자 · 사이클 · 회차 · 기록 · 진도 · 리포트 · 청구)를 지운다.
+     * 함수 기능: 선생님의 과외 전부와 그 아래 데이터(일정 · 교재 · 정책 · 설정 · 참여자 · 사이클 · 회차 · 기록 · 진도 · 리포트 · 청구 · 공유 기록)를 지운다.
      *          일괄 삭제는 영속성 컨텍스트를 거치지 않는다. 시드는 이 호출 전에 과외 쪽 엔티티를 불러오지 않으므로
      *          낡은 엔티티가 남지 않는다 (불러온 것은 지우지 않는 User뿐).
      * @param teacherId 시드 선생님 회원 ID

@@ -10,6 +10,11 @@ import com.sudam.domain.invoice.enums.InvoiceStatus;
 import com.sudam.domain.invoice.exception.InvoiceException;
 import com.sudam.domain.invoice.exception.code.InvoiceErrorCode;
 import com.sudam.domain.invoice.repository.InvoiceRepository;
+import com.sudam.domain.participant.dto.response.ParentResponse;
+import com.sudam.domain.participant.repository.ParticipantRepository;
+import com.sudam.domain.share.enums.ShareKind;
+import com.sudam.domain.share.enums.ShareSourceType;
+import com.sudam.domain.share.service.LinkShareRecorder;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringSetting;
 import com.sudam.domain.tutoring.repository.TutoringSettingRepository;
@@ -29,8 +34,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 수입 탭 입금 현황 조회와 선생님 입금 확인.
- * 두 API가 같은 한 줄 변환(toItems → InvoiceItemResponse.of)을 쓴다.
+ * 수입 탭 입금 현황 조회, 선생님 입금 확인, 입금 안내 다시 보내기 확인.
+ * 세 API가 같은 한 줄 변환(toItems → InvoiceItemResponse.of)을 쓴다.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,6 +48,8 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
     private final TutoringSettingRepository tutoringSettingRepository;
+    private final ParticipantRepository participantRepository;
+    private final LinkShareRecorder linkShareRecorder;
     private final Clock clock;
 
     /***
@@ -103,6 +110,13 @@ public class InvoiceService {
     /***
      * 함수 기능: 카카오톡 공유 창으로 입금 안내를 다시 보낸 뒤 호출한다. 다시 보낸 시각을 남기고
      *          바뀐 한 줄(아래 줄 RESENT)을 목록과 같은 변환으로 돌려준다.
+     *
+     *          전체 흐름 (T5 '안 들어온 교육비 다시 안내하기'):
+     *          ① 프론트가 POST /shares (kind = PAYMENT_RESEND, sourceId = 청구 ID, participantId = 카드의 parents)로
+     *             카톡 메시지 · 링크를 받는다. 이때 link_shares에 REQUESTED 행이 생긴다 (ShareService).
+     *          ② 프론트가 카카오톡 공유 창을 띄우고 선생님이 보낸다. 서버는 이 단계를 알 수 없다 (웹훅은 UT 이후).
+     *          ③ 프론트가 이 API를 부른다 → 청구에 다시 보낸 시각을 남기고, ①의 REQUESTED를 SENT로 바꾼다.
+     *          공유 창 없이 이 API만 불러도 청구는 바뀐다 (공유 기록만 없을 뿐이다).
      * @param teacherId 로그인한 선생님 (users.id)
      * @param invoiceId 청구 ID
      * @return 다시 보낸 뒤의 교육비 한 줄
@@ -111,31 +125,50 @@ public class InvoiceService {
      */
     @Transactional
     public InvoiceItemResponse renotify(Long teacherId, Long invoiceId) {
-        // 입금 확인과 겹치면 늦게 커밋한 쪽이 상태를 덮어쓰므로 청구 행을 잠근 뒤 바꾼다.
+        // 1. 청구 조회 · 소유 확인: 입금 확인과 동시에 들어오면 늦게 커밋한 쪽이 상태를 덮어쓰므로
+        //    청구 행을 잠근다(SELECT … FOR UPDATE). 남의 청구 · 삭제된 과외도 '없음'(INVOICE404_1)으로 응답해
+        //    다른 선생님의 청구가 있는지 드러내지 않는다.
         Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
                 .filter(found -> isOwnedBy(found.getTutoring(), teacherId))
                 .orElseThrow(() -> new InvoiceException(InvoiceErrorCode.INVOICE_NOT_FOUND));
 
-        invoice.renotify(LocalDateTime.now(clock));
+        // 2. 다시 보낸 시각 기록: 규칙(취소 · 완납이면 거절, 마지막 시각으로 덮어쓰기)은 엔티티가 지킨다.
+        //    변경 감지로 커밋 때 renotified_at이 저장된다.
+        LocalDateTime now = LocalDateTime.now(clock);
+        invoice.renotify(now);
 
+        // 3. 공유 기록 완료: ①에서 남긴 이 청구의 PAYMENT_RESEND REQUESTED를 SENT(MANUAL)로 바꾼다.
+        //    웹훅을 받기 전에는 선생님의 이 확인이 '보냈다'는 유일한 증거다. 같은 트랜잭션이라 2와 함께 커밋 · 롤백된다.
+        //    같은 청구의 첫 교육비 안내(FIRST_INVOICE) 공유는 종류가 달라 건드리지 않는다.
+        linkShareRecorder.markSentByTeacher(ShareKind.PAYMENT_RESEND, ShareSourceType.INVOICE, invoiceId, now);
+
+        // 4. 응답 한 줄 만들기: 입금 현황 목록과 같은 변환을 써서 프론트가 카드 하나만 바꿔 끼우면 되게 한다.
+        //    '앞선 청구 잔액'을 계산하려고 같은 과외의 잔액이 남을 수 있는 청구를 함께 가져온다.
+        //    입금 대기(PENDING)면 아래 줄이 RESENT('카톡으로 입금 안내를 다시 보냈어요')가 되고,
+        //    확인 대기 · 일부 입금은 statusLine 순서상 그 표시가 먼저 보인다.
         List<Invoice> unsettled =
                 invoiceRepository.findAllByTutoringIdAndStatusIn(invoice.getTutoring().getId(), UNSETTLED_STATUSES);
         return toItems(List.of(invoice), unsettled).getFirst();
     }
 
-    // 세 API가 공유하는 한 줄 변환. 공유 설정은 대상 과외 것만 한 번에 가져온다.
+    // 세 API가 공유하는 한 줄 변환. 공유 설정 · 받는 사람(학부모)은 대상 과외 것만 한 번에 가져온다.
     private List<InvoiceItemResponse> toItems(Collection<Invoice> targets, Collection<Invoice> unsettled) {
         Set<Long> tutoringIds = targets.stream()
                 .map(invoice -> invoice.getTutoring().getId())
                 .collect(Collectors.toSet());
         Map<Long, Boolean> reminderEnabledByTutoring = tutoringSettingRepository.findAllById(tutoringIds).stream()
                 .collect(Collectors.toMap(TutoringSetting::getTutoringId, TutoringSetting::isUnpaidReminderEnabled));
+        Map<Long, List<ParentResponse>> parentsByTutoring = participantRepository.findShareableParents(tutoringIds)
+                .stream()
+                .collect(Collectors.groupingBy(parent -> parent.getTutoring().getId(),
+                        Collectors.mapping(ParentResponse::from, Collectors.toList())));
 
         return targets.stream()
                 .map(invoice -> InvoiceItemResponse.of(
                         invoice,
                         previousUnpaidAmount(invoice, unsettled),
-                        reminderEnabledByTutoring.getOrDefault(invoice.getTutoring().getId(), false)))
+                        reminderEnabledByTutoring.getOrDefault(invoice.getTutoring().getId(), false),
+                        parentsByTutoring.getOrDefault(invoice.getTutoring().getId(), List.of())))
                 .toList();
     }
 

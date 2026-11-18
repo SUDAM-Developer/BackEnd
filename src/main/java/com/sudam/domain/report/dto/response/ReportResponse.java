@@ -1,5 +1,6 @@
 package com.sudam.domain.report.dto.response;
 
+import com.sudam.domain.participant.dto.response.ParentResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.entity.SettlementReportProgress;
 import com.sudam.domain.report.enums.ReportStatus;
@@ -33,7 +34,10 @@ public record ReportResponse(
 
         // 이해도 수준 (상 3 · 중 2 · 하 1점 가중평균: 2.5 이상 HIGH, 1.5 이상 MEDIUM, 그 아래 LOW).
         // 이해도 기록이 없으면 null. 같은 이름의 응답 레코드(Understanding)와 겹쳐 enum은 전체 이름으로 쓴다.
-        com.sudam.domain.record.enums.Understanding understandingLevel
+        com.sudam.domain.record.enums.Understanding understandingLevel,
+
+        // 카톡 공유를 받을 수 있는 학부모 (공유 정보 생성의 participantId). 학부모 링크 화면에서는 비어 있다.
+        List<ParentResponse> parents
 ) {
 
     public record Period(LocalDate startDate, LocalDate endDate) {
@@ -86,10 +90,11 @@ public record ReportResponse(
      * @param progress 진도 행 (표시 순서대로)
      * @param startDate 사이클 첫 인정 회차 날짜
      * @param endDate 사이클 마지막 인정 회차 날짜
+     * @param parents 카톡 공유를 받을 수 있는 학부모
      * @return 조회 응답
      */
     public static ReportResponse of(SettlementReport report, List<SettlementReportProgress> progress,
-                                    LocalDate startDate, LocalDate endDate) {
+                                    LocalDate startDate, LocalDate endDate, List<ParentResponse> parents) {
         return new ReportResponse(
                 report.getId(),
                 report.getStatus(),
@@ -108,7 +113,8 @@ public record ReportResponse(
                         .map(row -> new Progress(row.getTextbookName(), row.getStartLabel(), row.getEndLabel(),
                                 row.getTextbookStatus()))
                         .toList(),
-                report.understandingLevel().orElse(null)
+                report.understandingLevel().orElse(null),
+                List.copyOf(parents)
         );
     }
 }

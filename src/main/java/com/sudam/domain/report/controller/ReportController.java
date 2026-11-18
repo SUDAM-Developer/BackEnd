@@ -3,7 +3,6 @@ package com.sudam.domain.report.controller;
 import com.sudam.domain.report.dto.request.SaveReportCommentRequest;
 import com.sudam.domain.report.dto.response.ReportCommentResponse;
 import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
-import com.sudam.domain.report.dto.response.ReportRecipientListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.dto.response.ReportSendResponse;
 import com.sudam.domain.report.exception.code.ReportSuccessCode;
@@ -51,16 +50,6 @@ public class ReportController {
     public ApiResponse<ReportResponse> get(@AuthenticationPrincipal CustomOAuth2User principal,
                                            @PathVariable Long reportId) {
         return ApiResponse.onSuccess(ReportSuccessCode.REPORT_FOUND, reportService.get(principal.getUserId(), reportId));
-    }
-
-    @Operation(summary = "정산 리포트 받는 사람 조회",
-            description = "리포트를 받을 학부모(삭제되지 않았고 링크가 있는 사람)와 각자의 학부모 리포트 화면 URL을 돌려준다. "
-                    + "카카오톡 공유 메시지에 넣는다. 없거나 남의 리포트면 REPORT404_1.")
-    @GetMapping("/{reportId}/recipients")
-    public ApiResponse<ReportRecipientListResponse> listRecipients(
-            @AuthenticationPrincipal CustomOAuth2User principal, @PathVariable Long reportId) {
-        return ApiResponse.onSuccess(ReportSuccessCode.RECIPIENTS_FOUND,
-                reportService.listRecipients(principal.getUserId(), reportId));
     }
 
     @Operation(summary = "정산 리포트 코멘트 조회",
