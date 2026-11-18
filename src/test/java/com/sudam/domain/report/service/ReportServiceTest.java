@@ -1,6 +1,7 @@
 package com.sudam.domain.report.service;
 
 import com.sudam.domain.cycle.entity.Cycle;
+import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.entity.SettlementReportProgress;
@@ -93,6 +94,33 @@ class ReportServiceTest {
                 new ReportResponse.Understanding(5, 3, 0)));
         assertThat(response.progress()).containsExactly(
                 new ReportResponse.Progress("수능특강 영어", "3강", "9강", ReportTextbookStatus.ACTIVE));
+    }
+
+    @Test
+    @DisplayName("리포트 목록은 레포지토리 순서대로 과외 · 학생 이름 · 발송 상태를 담는다")
+    void 리포트_목록_조회() {
+        // given
+        given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of(report));
+
+        // when
+        ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
+
+        // then
+        assertThat(response.items()).containsExactly(new ReportDeliveryListResponse.Item(
+                REPORT_ID, 10L, "윤서아", ReportStatus.GENERATED, null, null));
+    }
+
+    @Test
+    @DisplayName("리포트가 없으면 빈 목록을 돌려준다")
+    void 리포트_목록_없음() {
+        // given
+        given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of());
+
+        // when
+        ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
+
+        // then
+        assertThat(response.items()).isEmpty();
     }
 
     @Test
