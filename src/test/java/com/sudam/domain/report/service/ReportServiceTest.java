@@ -9,7 +9,9 @@ import com.sudam.domain.report.enums.ReportStatus;
 import com.sudam.domain.report.enums.ReportTextbookStatus;
 import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.repository.SettlementReportProgressRepository;
+import com.sudam.domain.report.repository.ReportFirstViewedAt;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.session.repository.CycleFirstRecognizedDate;
 import com.sudam.domain.session.repository.SessionRepository;
 import com.sudam.domain.tutoring.entity.Textbook;
@@ -37,6 +39,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -55,6 +58,7 @@ class ReportServiceTest {
     @Mock private SettlementReportRepository settlementReportRepository;
     @Mock private SettlementReportProgressRepository settlementReportProgressRepository;
     @Mock private SessionRepository sessionRepository;
+    @Mock private SettlementReportViewRepository settlementReportViewRepository;
 
     @InjectMocks
     private ReportService reportService;
@@ -115,7 +119,25 @@ class ReportServiceTest {
 
         // then
         assertThat(response.items()).containsExactly(new ReportDeliveryListResponse.Item(
-                REPORT_ID, 10L, "윤서아", YearMonth.of(2026, 9), ReportStatus.GENERATED, null, null));
+                REPORT_ID, 10L, "윤서아", YearMonth.of(2026, 9), ReportStatus.GENERATED, null, null, null));
+    }
+
+    @Test
+    @DisplayName("열람 기록이 있는 리포트만 viewedAt에 첫 열람 시각이 담기고, 없으면 null이다")
+    void 리포트_목록_열람_시각() {
+        // given
+        SettlementReport unreadReport = reportOfCycleStartedAt(LocalDateTime.of(2026, 10, 1, 0, 0));
+        given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of(unreadReport, report));
+        given(settlementReportViewRepository.findFirstViewedAts(List.of(22L, REPORT_ID)))
+                .willReturn(List.of(new ReportFirstViewedAt(REPORT_ID, LocalDateTime.of(2026, 10, 2, 20, 15))));
+
+        // when
+        ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
+
+        // then
+        assertThat(response.items()).extracting(ReportDeliveryListResponse.Item::reportId,
+                        ReportDeliveryListResponse.Item::viewedAt)
+                .containsExactly(tuple(22L, null), tuple(REPORT_ID, LocalDateTime.of(2026, 10, 2, 20, 15)));
     }
 
     @Test
@@ -163,6 +185,7 @@ class ReportServiceTest {
         // then
         assertThat(response.items()).isEmpty();
         then(sessionRepository).should(never()).findFirstRecognizedDates(any());
+        then(settlementReportViewRepository).should(never()).findFirstViewedAts(any());
     }
 
     // 같은 과외의 다른 사이클 리포트. 사이클 시작 시각만 바꿔 정산 월 경계를 본다.
