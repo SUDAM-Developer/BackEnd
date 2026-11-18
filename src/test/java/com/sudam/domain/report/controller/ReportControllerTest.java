@@ -31,6 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -64,9 +65,9 @@ class ReportControllerTest {
     void 리포트_목록_조회() throws Exception {
         // given
         given(reportService.listDeliveries(TEACHER_ID)).willReturn(new ReportDeliveryListResponse(List.of(
-                new ReportDeliveryListResponse.Item(22L, 4L, "박지후", ReportStatus.SENT,
+                new ReportDeliveryListResponse.Item(22L, 4L, "박지후", YearMonth.of(2026, 9), ReportStatus.SENT,
                         LocalDateTime.of(2026, 10, 1, 9, 20, 0), LocalDateTime.of(2026, 9, 30, 21, 0, 0)),
-                new ReportDeliveryListResponse.Item(21L, 3L, "윤서아", ReportStatus.GENERATED,
+                new ReportDeliveryListResponse.Item(21L, 3L, "윤서아", YearMonth.of(2026, 9), ReportStatus.GENERATED,
                         null, LocalDateTime.of(2026, 9, 29, 20, 0, 0)))));
 
         // when & then
@@ -78,6 +79,7 @@ class ReportControllerTest {
                 .andExpect(jsonPath("$.result.items[0].reportId").value(22))
                 .andExpect(jsonPath("$.result.items[0].tutoringId").value(4))
                 .andExpect(jsonPath("$.result.items[0].studentName").value("박지후"))
+                .andExpect(jsonPath("$.result.items[0].settlementMonth").value("2026-09"))
                 .andExpect(jsonPath("$.result.items[0].status").value("SENT"))
                 .andExpect(jsonPath("$.result.items[0].sentAt").value("2026-10-01T09:20:00"))
                 .andExpect(jsonPath("$.result.items[0].createdAt").value("2026-09-30T21:00:00"))

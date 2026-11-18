@@ -10,6 +10,7 @@ import com.sudam.domain.report.enums.ReportTextbookStatus;
 import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.repository.SettlementReportProgressRepository;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.session.repository.CycleFirstRecognizedDate;
 import com.sudam.domain.session.repository.SessionRepository;
 import com.sudam.domain.tutoring.entity.Textbook;
 import com.sudam.domain.tutoring.entity.Tutoring;
@@ -30,12 +31,16 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ReportService 정산 리포트 조회")
@@ -45,6 +50,7 @@ class ReportServiceTest {
     private static final Long OTHER_TEACHER_ID = 2L;
     private static final Long REPORT_ID = 21L;
     private static final Long CYCLE_ID = 88L;
+    private static final Long OTHER_CYCLE_ID = 89L;
 
     @Mock private SettlementReportRepository settlementReportRepository;
     @Mock private SettlementReportProgressRepository settlementReportProgressRepository;
@@ -97,21 +103,56 @@ class ReportServiceTest {
     }
 
     @Test
-    @DisplayName("리포트 목록은 레포지토리 순서대로 과외 · 학생 이름 · 발송 상태를 담는다")
+    @DisplayName("리포트 목록은 레포지토리 순서대로 과외 · 학생 이름 · 정산 월 · 발송 상태를 담는다")
     void 리포트_목록_조회() {
         // given
         given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of(report));
+        given(sessionRepository.findFirstRecognizedDates(List.of(CYCLE_ID)))
+                .willReturn(List.of(new CycleFirstRecognizedDate(CYCLE_ID, LocalDate.of(2026, 9, 14))));
 
         // when
         ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
 
         // then
         assertThat(response.items()).containsExactly(new ReportDeliveryListResponse.Item(
-                REPORT_ID, 10L, "윤서아", ReportStatus.GENERATED, null, null));
+                REPORT_ID, 10L, "윤서아", YearMonth.of(2026, 9), ReportStatus.GENERATED, null, null));
     }
 
     @Test
-    @DisplayName("리포트가 없으면 빈 목록을 돌려준다")
+    @DisplayName("사이클이 앞 달 말일에 열렸어도 정산 월은 첫 인정 회차의 월이다")
+    void 정산_월_첫_인정_회차_기준() {
+        // given
+        SettlementReport monthEndReport = reportOfCycleStartedAt(LocalDateTime.of(2026, 8, 31, 23, 59));
+        given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of(monthEndReport));
+        given(sessionRepository.findFirstRecognizedDates(List.of(OTHER_CYCLE_ID)))
+                .willReturn(List.of(new CycleFirstRecognizedDate(OTHER_CYCLE_ID, LocalDate.of(2026, 9, 1))));
+
+        // when
+        ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
+
+        // then
+        assertThat(response.items()).extracting(ReportDeliveryListResponse.Item::settlementMonth)
+                .containsExactly(YearMonth.of(2026, 9));
+    }
+
+    @Test
+    @DisplayName("인정 회차가 없는 사이클의 정산 월은 사이클 시작월이다")
+    void 정산_월_인정_회차_없음() {
+        // given
+        SettlementReport noSessionReport = reportOfCycleStartedAt(LocalDateTime.of(2026, 8, 31, 23, 59));
+        given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of(noSessionReport));
+        given(sessionRepository.findFirstRecognizedDates(List.of(OTHER_CYCLE_ID))).willReturn(List.of());
+
+        // when
+        ReportDeliveryListResponse response = reportService.listDeliveries(TEACHER_ID);
+
+        // then
+        assertThat(response.items()).extracting(ReportDeliveryListResponse.Item::settlementMonth)
+                .containsExactly(YearMonth.of(2026, 8));
+    }
+
+    @Test
+    @DisplayName("리포트가 없으면 회차를 조회하지 않고 빈 목록을 돌려준다")
     void 리포트_목록_없음() {
         // given
         given(settlementReportRepository.findAllOfTeacher(TEACHER_ID)).willReturn(List.of());
@@ -121,6 +162,15 @@ class ReportServiceTest {
 
         // then
         assertThat(response.items()).isEmpty();
+        then(sessionRepository).should(never()).findFirstRecognizedDates(any());
+    }
+
+    // 같은 과외의 다른 사이클 리포트. 사이클 시작 시각만 바꿔 정산 월 경계를 본다.
+    private SettlementReport reportOfCycleStartedAt(LocalDateTime startedAt) {
+        Cycle cycle = withId(Cycle.open(report.getTutoring(), 2, startedAt), OTHER_CYCLE_ID);
+        return withId(SettlementReport.builder().tutoring(report.getTutoring()).cycle(cycle)
+                .completedCount(8).targetCount(8).canceledCount(0).homeworkRate(null).prevHomeworkRate(null)
+                .understandingHigh(0).understandingMedium(0).understandingLow(0).build(), 22L);
     }
 
     @Test
