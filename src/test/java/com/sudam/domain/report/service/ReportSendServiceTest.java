@@ -4,6 +4,9 @@ import com.sudam.domain.report.dto.response.ReportSendResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.enums.ReportStatus;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.share.enums.ShareKind;
+import com.sudam.domain.share.enums.ShareSourceType;
+import com.sudam.domain.share.service.LinkShareRecorder;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.user.entity.TeacherProfile;
 import com.sudam.domain.user.entity.User;
@@ -27,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ReportSendService 정산 리포트 발송 확인")
@@ -39,13 +43,14 @@ class ReportSendServiceTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 1, 9, 20, 0);
 
     @Mock private SettlementReportRepository settlementReportRepository;
+    @Mock private LinkShareRecorder linkShareRecorder;
 
     private ReportSendService reportSendService;
     private SettlementReport report;
 
     @BeforeEach
     void setUp() {
-        reportSendService = new ReportSendService(settlementReportRepository,
+        reportSendService = new ReportSendService(settlementReportRepository, linkShareRecorder,
                 Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL));
         TeacherProfile teacher = withId(TeacherProfile.create(
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"),
@@ -71,6 +76,9 @@ class ReportSendServiceTest {
         assertThat(response.reportId()).isEqualTo(REPORT_ID);
         assertThat(response.status()).isEqualTo(ReportStatus.SENT);
         assertThat(response.sentAt()).isEqualTo(NOW);
+        // 공유 정보를 만들 때 남긴 REQUESTED 정산 리포트 공유도 같은 시각에 보낸 것으로 바뀐다.
+        then(linkShareRecorder).should()
+                .markSentByTeacher(ShareKind.SETTLEMENT_REPORT, ShareSourceType.REPORT, REPORT_ID, NOW);
     }
 
     @Test
@@ -86,6 +94,7 @@ class ReportSendServiceTest {
                 .extracting(e -> ((ProjectException) e).getErrorCode().getCode())
                 .isEqualTo("REPORT404_1");
         assertThat(report.getStatus()).isEqualTo(ReportStatus.GENERATED);
+        then(linkShareRecorder).shouldHaveNoInteractions();
     }
 
     private static <T> T withId(T entity, Long id) {

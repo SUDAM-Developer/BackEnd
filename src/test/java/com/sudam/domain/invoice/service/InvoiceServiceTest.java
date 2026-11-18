@@ -10,6 +10,11 @@ import com.sudam.domain.invoice.enums.InvoiceKind;
 import com.sudam.domain.invoice.enums.InvoiceStatus;
 import com.sudam.domain.invoice.enums.InvoiceStatusLineType;
 import com.sudam.domain.invoice.repository.InvoiceRepository;
+import com.sudam.domain.participant.dto.response.ParentResponse;
+import com.sudam.domain.participant.repository.ParticipantRepository;
+import com.sudam.domain.share.enums.ShareKind;
+import com.sudam.domain.share.enums.ShareSourceType;
+import com.sudam.domain.share.service.LinkShareRecorder;
 import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.tutoring.entity.Tutoring;
@@ -71,13 +76,18 @@ class InvoiceServiceTest {
     private InvoiceRepository invoiceRepository;
     @Mock
     private TutoringSettingRepository tutoringSettingRepository;
+    @Mock
+    private ParticipantRepository participantRepository;
+    @Mock
+    private LinkShareRecorder linkShareRecorder;
 
     private InvoiceService invoiceService;
 
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL);
-        invoiceService = new InvoiceService(invoiceRepository, tutoringSettingRepository, clock);
+        invoiceService = new InvoiceService(invoiceRepository, tutoringSettingRepository, participantRepository,
+                linkShareRecorder, clock);
     }
 
     @Nested
@@ -319,6 +329,27 @@ class InvoiceServiceTest {
     }
 
     @Test
+    @DisplayName("한 줄마다 그 과외의 카톡 공유를 받을 수 있는 학부모를 담고, 없으면 빈 목록이다")
+    void 받는_사람_학부모() {
+        // given
+        Tutoring withParent = tutoring(100L, TEACHER_ID);
+        Tutoring withoutParent = tutoring(200L, TEACHER_ID);
+        Invoice first = invoice(1L, withParent, 360_000, NOV_10);
+        Invoice second = invoice(2L, withoutParent, 360_000, NOV_10);
+        Participant mother = Participant.createParent(withParent, ParticipantLabel.MOTHER, "01000000001");
+        set(mother, "id", 31L);
+        stubList(List.of(first, second), List.of(), List.of());
+        given(participantRepository.findShareableParents(anyCollection())).willReturn(List.of(mother));
+
+        // when
+        InvoiceListResponse response = invoiceService.getInvoices(TEACHER_ID, NOVEMBER);
+
+        // then
+        assertThat(itemOf(response, 1L).parents()).containsExactly(new ParentResponse(31L, ParticipantLabel.MOTHER));
+        assertThat(itemOf(response, 2L).parents()).isEmpty();
+    }
+
+    @Test
     @DisplayName("summary와 건수는 items에서 더한 값과 같다")
     void 요약은_items_합() {
         // given
@@ -476,6 +507,8 @@ class InvoiceServiceTest {
             assertThat(item.invoiceId()).isEqualTo(10L);
             assertThat(item.statusLine().type()).isEqualTo(InvoiceStatusLineType.RESENT);
             assertThat(item.statusLine().at()).isEqualTo(NOW);
+            // 공유 정보를 만들 때 남긴 REQUESTED 재입금 알림 공유도 같은 시각에 보낸 것으로 바뀐다.
+            verify(linkShareRecorder).markSentByTeacher(ShareKind.PAYMENT_RESEND, ShareSourceType.INVOICE, 10L, NOW);
         }
 
         @Test

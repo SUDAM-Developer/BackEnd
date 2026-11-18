@@ -6,6 +6,8 @@ import com.sudam.domain.invoice.dto.response.InvoiceListResponse;
 import com.sudam.domain.invoice.dto.response.PaymentConfirmResponse;
 import com.sudam.domain.invoice.enums.InvoiceStatus;
 import com.sudam.domain.invoice.enums.InvoiceStatusLineType;
+import com.sudam.domain.participant.dto.response.ParentResponse;
+import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.invoice.exception.InvoiceException;
 import com.sudam.domain.invoice.exception.code.InvoiceErrorCode;
 import com.sudam.domain.invoice.service.InvoiceService;
@@ -179,7 +181,8 @@ class InvoiceControllerTest {
         // given
         given(invoiceService.renotify(TEACHER_ID, 10L)).willReturn(new InvoiceItemResponse(
                 10L, 100L, "서아", "다음 8회차", 360_000, 0, 360_000, 0, InvoiceStatus.PENDING,
-                new InvoiceItemResponse.StatusLine(InvoiceStatusLineType.RESENT, NOV_15), 5L, NOV_15, NOV_15));
+                new InvoiceItemResponse.StatusLine(InvoiceStatusLineType.RESENT, NOV_15), 5L, NOV_15, NOV_15,
+                List.of(new ParentResponse(31L, ParticipantLabel.MOTHER))));
 
         // when & then
         mockMvc.perform(post("/api/v1/invoices/10/renotifications").with(teacher()))
@@ -188,7 +191,9 @@ class InvoiceControllerTest {
                 .andExpect(jsonPath("$.code").value("INVOICE200_4"))
                 .andExpect(jsonPath("$.result.invoiceId").value(10))
                 .andExpect(jsonPath("$.result.statusLine.type").value("RESENT"))
-                .andExpect(jsonPath("$.result.statusLine.at").value("2026-11-15T20:00:00"));
+                .andExpect(jsonPath("$.result.statusLine.at").value("2026-11-15T20:00:00"))
+                .andExpect(jsonPath("$.result.parents[0].participantId").value(31))
+                .andExpect(jsonPath("$.result.parents[0].label").value("MOTHER"));
     }
 
     @Test
@@ -209,7 +214,7 @@ class InvoiceControllerTest {
                 status, new InvoiceItemResponse.StatusLine(
                         status == InvoiceStatus.PAID ? InvoiceStatusLineType.NONE : InvoiceStatusLineType.PARTIAL_PAID,
                         status == InvoiceStatus.PAID ? null : NOV_15),
-                null, NOV_15, NOV_15);
+                null, NOV_15, NOV_15, List.of());
     }
 
     // 운영 principal과 같은 CustomOAuth2User(userId, Role)를 SecurityContext에 넣는다 (security-convention.md).

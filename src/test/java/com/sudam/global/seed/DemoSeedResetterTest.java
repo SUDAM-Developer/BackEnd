@@ -60,14 +60,15 @@ class DemoSeedResetterTest {
         ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
         verify(entityManager, org.mockito.Mockito.atLeastOnce()).createQuery(jpql.capture());
         assertThat(jpql.getAllValues()).extracting(DemoSeedResetterTest::targetEntity).containsExactly(
+                "LinkShare",
                 "InvoiceAmountAdjustment", "InvoicePayment", "Invoice",
                 "SettlementReportView", "SettlementReportProgress", "SettlementReport",
                 "SessionProgress", "SessionRecord", "Session", "Cycle",
                 "Participant", "Participant",
                 "TutoringSetting", "TutoringPolicy", "Textbook", "TutoringSchedule", "Tutoring");
         // 학생 행이 같은 테이블의 학부모 행을 가리키므로, 지우기 전에 그 참조를 먼저 비운다.
-        assertThat(jpql.getAllValues().get(10)).startsWith("update Participant");
-        assertThat(jpql.getAllValues().get(11)).startsWith("delete from Participant");
+        assertThat(jpql.getAllValues().get(11)).startsWith("update Participant");
+        assertThat(jpql.getAllValues().get(12)).startsWith("delete from Participant");
     }
 
     private void givenTutoringIds(List<Long> ids) {

@@ -41,20 +41,20 @@ class ParentReportControllerTest {
     private ParentReportService parentReportService;
 
     @Test
-    @DisplayName("로그인 없이 토큰으로 열면 200 · REPORT200_7이고 요약 · 코멘트 · 선생님 이름을 내려준다")
+    @DisplayName("로그인 없이 토큰으로 열면 200 · REPORT200_6이고 요약 · 코멘트 · 선생님 이름을 내려준다")
     void 리포트_열기() throws Exception {
         // given
         given(parentReportService.get("mother-token", 21L)).willReturn(new ParentReportResponse(
                 new ReportResponse(21L, ReportStatus.SENT, "윤서아",
                         new ReportResponse.Period(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)),
-                        null, List.of(), null),
-                "이번 달 서아는 …", "한서윤", LocalDateTime.of(2026, 10, 1, 9, 20, 0)));
+                        null, List.of(), null, List.of()),
+                "이번 달 서아는 …", null, "한서윤", LocalDateTime.of(2026, 10, 1, 9, 20, 0)));
 
         // when & then
         mockMvc.perform(get("/api/v1/links/mother-token/reports/21"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.isSuccess").value(true))
-                .andExpect(jsonPath("$.code").value("REPORT200_7"))
+                .andExpect(jsonPath("$.code").value("REPORT200_6"))
                 .andExpect(jsonPath("$.result.report.reportId").value(21))
                 .andExpect(jsonPath("$.result.report.studentName").value("윤서아"))
                 .andExpect(jsonPath("$.result.comment").value("이번 달 서아는 …"))
