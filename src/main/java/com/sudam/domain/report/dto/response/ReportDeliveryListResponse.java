@@ -23,6 +23,7 @@ public record ReportDeliveryListResponse(List<Item> items) {
      * @param settlementMonth 정산 월 (yyyy-MM). 사이클 첫 인정 회차의 월, 인정 회차가 없으면 사이클 시작월
      * @param status          GENERATED / SENT
      * @param sentAt          첫 발송 확인 시각. 보내지 않았으면 null
+     * @param viewedAt        첫 열람 시각 (참여자 중 먼저 연 시각). 열람 기록이 없으면 null
      * @param createdAt       리포트를 만든 시각 (정산 시각)
      */
     public record Item(
@@ -32,12 +33,13 @@ public record ReportDeliveryListResponse(List<Item> items) {
             YearMonth settlementMonth,
             ReportStatus status,
             LocalDateTime sentAt,
+            LocalDateTime viewedAt,
             LocalDateTime createdAt
     ) {
 
-        public static Item of(SettlementReport report, YearMonth settlementMonth) {
+        public static Item of(SettlementReport report, YearMonth settlementMonth, LocalDateTime viewedAt) {
             return new Item(report.getId(), report.getTutoring().getId(), report.getTutoring().getStudentName(),
-                    settlementMonth, report.getStatus(), report.getSentAt(), report.getCreatedAt());
+                    settlementMonth, report.getStatus(), report.getSentAt(), viewedAt, report.getCreatedAt());
         }
     }
 }

@@ -7,7 +7,9 @@ import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.exception.code.ReportErrorCode;
 import com.sudam.domain.report.repository.SettlementReportProgressRepository;
+import com.sudam.domain.report.repository.ReportFirstViewedAt;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.session.repository.CycleFirstRecognizedDate;
 import com.sudam.domain.session.repository.SessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,7 @@ public class ReportService {
     private final SettlementReportRepository settlementReportRepository;
     private final SettlementReportProgressRepository settlementReportProgressRepository;
     private final SessionRepository sessionRepository;
+    private final SettlementReportViewRepository settlementReportViewRepository;
 
     /***
      * 함수 기능: 선생님의 정산 리포트 목록(발송 현황)을 최근에 만든 순으로 조회한다.
@@ -48,9 +52,16 @@ public class ReportService {
         Map<Long, LocalDate> firstDateByCycleId = sessionRepository.findFirstRecognizedDates(cycleIds).stream()
                 .collect(Collectors.toMap(CycleFirstRecognizedDate::cycleId, CycleFirstRecognizedDate::firstDate));
 
+        // 열람 시각도 리포트 ID로 한 번에 모은다. 기록이 없는 리포트는 null(안 읽음)이 된다.
+        List<Long> reportIds = reports.stream().map(SettlementReport::getId).toList();
+        Map<Long, LocalDateTime> viewedAtByReportId = settlementReportViewRepository.findFirstViewedAts(reportIds)
+                .stream()
+                .collect(Collectors.toMap(ReportFirstViewedAt::reportId, ReportFirstViewedAt::firstViewedAt));
+
         return new ReportDeliveryListResponse(reports.stream()
                 .map(report -> ReportDeliveryListResponse.Item.of(report,
-                        settlementMonth(firstDateByCycleId.get(report.getCycle().getId()), report.getCycle())))
+                        settlementMonth(firstDateByCycleId.get(report.getCycle().getId()), report.getCycle()),
+                        viewedAtByReportId.get(report.getId())))
                 .toList());
     }
 
