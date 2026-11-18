@@ -268,13 +268,15 @@
   "progress": [
     { "textbookName": "수능특강 영어", "startLabel": "3강", "endLabel": "9강", "textbookStatus": "ACTIVE" },
     { "textbookName": "Grammar Zone 기본", "startLabel": "Unit 12", "endLabel": "Unit 20", "textbookStatus": "ACTIVE" }
-  ]
+  ],
+  "understandingLevel": "HIGH"
 }
 ```
 
 - `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT`. `textbookStatus`: 교재 추가 · 종료 기능 전까지 `ACTIVE`.
 - `period`: 사이클 인정 회차의 첫 · 마지막 수업일. `canceledCount`: 그 기간의 휴강 수.
 - `homeworkRate`: (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수, % 반올림. 결과가 없으면 `null`. `prevHomeworkRate`: 직전 사이클 리포트 값, 없으면 `null`.
+- `understandingLevel`: 이해도 수준 `HIGH` / `MEDIUM` / `LOW`. `understanding` 횟수로 조회 때 계산한다. 상 3 · 중 2 · 하 1점 가중평균이 2.5 이상이면 `HIGH`, 1.5 이상이면 `MEDIUM`, 그 아래 `LOW`. 이해도 기록이 0건이면 `null`.
 - `progress`: 교재 ID 순, 사이클 첫 회차 시작 ~ 마지막 회차 끝 진도. 라벨 `Unit 12` · `Chapter 3` · `3단원` · `45p` · `3회`, 직접 입력 단위는 숫자 + 단위(`9강`). 진도 기록이 없는 교재는 빠진다.
 
 에러: `reportId`가 숫자가 아님 `COMMON400` / 없거나 남의 리포트 `REPORT404_1`.

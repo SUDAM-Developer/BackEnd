@@ -1,6 +1,7 @@
 package com.sudam.domain.report.entity;
 
 import com.sudam.domain.cycle.entity.Cycle;
+import com.sudam.domain.record.enums.Understanding;
 import com.sudam.domain.report.enums.CommentSource;
 import com.sudam.domain.report.enums.DeliveryMethod;
 import com.sudam.domain.report.enums.ReportStatus;
@@ -29,6 +30,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * 정산 리포트 (사이클당 1개). 정산 회차를 채운 기록 저장 순간 그 사이클의 기록으로 통계를 계산해 저장한다.
@@ -181,5 +183,26 @@ public class SettlementReport extends BaseTimeEntity {
 
     public boolean isCommentReviewed() {
         return commentReviewedAt != null;
+    }
+
+    /***
+     * 함수 기능: 이해도 상 · 중 · 하 횟수로 이 사이클의 이해도 수준을 구한다.
+     *          상 3 · 중 2 · 하 1점의 가중평균이 2.5 이상이면 HIGH, 1.5 이상이면 MEDIUM, 그 아래는 LOW.
+     * @return 이해도 수준. 이해도 기록이 하나도 없으면 빈 값
+     */
+    public Optional<Understanding> understandingLevel() {
+        int total = understandingHigh + understandingMedium + understandingLow;
+        if (total == 0) {
+            return Optional.empty();
+        }
+        // 평균을 실수로 나누면 2.5 같은 경계에서 오차가 날 수 있어, 양변에 2 × 총 횟수를 곱해 정수로 비교한다.
+        int doubledScore = 2 * (3 * understandingHigh + 2 * understandingMedium + understandingLow);
+        if (doubledScore >= 5 * total) {
+            return Optional.of(Understanding.HIGH);
+        }
+        if (doubledScore >= 3 * total) {
+            return Optional.of(Understanding.MEDIUM);
+        }
+        return Optional.of(Understanding.LOW);
     }
 }
