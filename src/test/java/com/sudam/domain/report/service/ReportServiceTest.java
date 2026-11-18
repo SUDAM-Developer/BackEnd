@@ -1,6 +1,7 @@
 package com.sudam.domain.report.service;
 
 import com.sudam.domain.cycle.entity.Cycle;
+import com.sudam.domain.record.enums.Understanding;
 import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.entity.SettlementReport;
@@ -104,6 +105,8 @@ class ReportServiceTest {
                 new ReportResponse.Understanding(5, 3, 0)));
         assertThat(response.progress()).containsExactly(
                 new ReportResponse.Progress("수능특강 영어", "3강", "9강", ReportTextbookStatus.ACTIVE));
+        // 상 5 · 중 3 · 하 0 → 가중평균 2.625
+        assertThat(response.understandingLevel()).isEqualTo(Understanding.HIGH);
     }
 
     @Test
