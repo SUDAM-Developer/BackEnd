@@ -14,7 +14,8 @@ paths:
 
 - `csrf`, `httpBasic`, `formLogin` 비활성화. 세션은 `SessionCreationPolicy.STATELESS`.
 - CORS는 `corsConfigurationSource` 빈으로 켠다. 허용 출처는 프로파일별 `app.cors.allowed-origins`(개발 서버는 `FRONT_BASE_URL` + 로컬 프론트)에서 읽고, RT 쿠키를 주고받아야 해서 자격 증명을 허용한다(출처에 `*` 불가). 허용 헤더는 `Authorization` · `Content-Type`.
-- `allowUris`(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger 경로 `/swagger-ui/**`·`/swagger-ui.html`·`/v3/api-docs/**`)만 `permitAll`, 나머지는 `authenticated`. 재발급은 AT가 만료된 상태로 호출되므로 인증을 걸 수 없고, 인증 주체가 RT 쿠키다.
+- `allowUris`(`/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, `/api/v1/links/**`, Swagger 경로 `/swagger-ui/**`·`/swagger-ui.html`·`/v3/api-docs/**`)만 `permitAll`, 나머지는 `authenticated`. 재발급은 AT가 만료된 상태로 호출되므로 인증을 걸 수 없고, 인증 주체가 RT 쿠키다.
+- `/api/v1/links/**`는 학부모 링크 화면이다. 학부모는 계정이 없고 경로의 참여자 링크 토큰(`participants.link_token`)이 열쇠다. 토큰 확인은 `ParticipantLinkService.resolveParent`(삭제 · 과외 삭제 · 만료 · 역할)가 하며, 실패 사유를 구분하지 않고 `PARTICIPANT404_1`로 응답한다. 이 경로 아래에 선생님용 API를 두지 않는다.
 - `oauth2Login`에 `CustomOAuth2UserService`(userInfo) + `OAuth2LoginSuccessHandler` + `OAuth2LoginFailureHandler`를 연결.
 - `JwtAuthenticationFilter`를 `UsernamePasswordAuthenticationFilter` 앞에 등록(빈이 아니라 `new`로 만들어 `JwtUtil`·`TokenStore`를 넘긴다). `exceptionHandling`에 `CustomAuthenticationEntryPoint`(401) + `CustomAccessDeniedHandler`(403) 연결.
 

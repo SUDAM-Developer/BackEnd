@@ -96,7 +96,10 @@ com.sudam
 | COMMON | 200, 201 | 400 · 401 · 403 · 404 · 405 · 406 · 409 · 413 · 415 · 500 · 503 |
 | AUTH | 200_1 ~ 200_2 | 400_1, 401_1 ~ 401_6 |
 | USER | 200_1 ~ 200_4, 201_1 ~ 201_2 | 400_1 ~ 400_2, 404_1 ~ 404_2, 409_1 |
-| INVOICE | — | 404_1, 409_1 ~ 409_5 |
+| INVOICE | 200_1 ~ 200_4, 201_1 | 404_1, 409_1 ~ 409_5 |
+| REPORT | 200_1 ~ 200_7 | 404_1, 409_1 ~ 409_2 |
+| RECORD | 201_1 | 400_1 ~ 400_3, 404_1 ~ 404_3, 409_1 ~ 409_2 |
+| PARTICIPANT | — | 404_1 (학부모 링크) |
 | SETTLEMENT | — | 500_1 |
 
 ## 요청 처리 흐름
@@ -189,14 +192,15 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 - 과외마다 공통: 영어 과외, 수업 일정, 교재 1권, 선불 정책(사이클 1부터, 국민은행 · 가짜 계좌, 예금주 한서윤), 공유 설정, 학부모(어머님, 가짜 번호 `010000000xx`, 링크 토큰 발급).
 - 수입 화면(T-15) · 리포트(T-13 · T-14)용 4개 — 사이클 1(실행 5주 전 시작, 1주 전 SETTLED) · 사이클 2 IN_PROGRESS, 사이클 2를 청구하는 선불 '다음 N회차' 청구.
   - 사이클 1에 정산 회차만큼 회차 · 기록 · 진도(회차마다 2단원)를 깔고, 실제 정산 순서(정산 → 다음 사이클 → 리포트 → 청구)로 리포트를 만들어 청구 `report_id`에 연결한다. 실제 정산은 사이클을 닫을 때 항상 리포트를 만들므로 4명 모두 리포트가 있다. 이해도 분포는 학생마다 다르게 두었다.
-  - 리포트마다 그 학생 기록을 바탕으로 쓴 AI 초안 코멘트를 확인 전 상태(`commentSource: AI_DRAFT`, `reviewed: false`)로 넣는다. UT에서 AI 생성을 빼서 시드가 대신 넣는다.
+  - 리포트마다 그 학생 기록을 바탕으로 쓴 AI 초안 코멘트를 넣는다. UT에서 AI 생성을 빼서 시드가 대신 넣는다.
+  - 리포트 상태는 UT 설계서 시작 상태(#47)다. 박지후만 확인 전 `GENERATED`(T1 · T2), 나머지는 선생님이 초안을 그대로 확인해 정산 1시간 뒤 보낸 `SENT`. 윤서아 · 김하린은 보낸 3시간 뒤 학부모 첫 열람(`settlement_report_views`)이 있고, 이도윤은 안 읽음(T3). 김하린은 설계서에 없어 '생성됨'을 박지후 한 장으로 두려고 보낸 상태로 뒀다.
 
-| 학생 | 정산 회차 · 수업료 | 청구 상태 | 카드 아래 줄 | 사이클 1 리포트 (이해도 상/중/하, 숙제율) |
+| 학생 | 정산 회차 · 수업료 | 청구 상태 | 카드 아래 줄 | 사이클 1 리포트 (이해도 상/중/하, 숙제율 · 상태) |
 | --- | --- | --- | --- | --- |
-| 박지후 | 8 · 360,000 | CONFIRM_REQUESTED (실행 2시간 전 학부모 요청) | `PARENT_CONFIRMED` | 있음 (6/2/0, 93%) |
-| 윤서아 | 8 · 360,000 | PENDING, 미입금 알림 켬 | `REMINDER_SCHEDULED` | 있음 (2/5/1, 71%) |
-| 이도윤 | 4 · 200,000 | PARTIAL (실행 하루 전 120,000 입금) | `PARTIAL_PAID` | 있음 (0/1/3, 50%) |
-| 김하린 | 8 · 280,000 | PAID (실행 하루 전 전액 입금) | `NONE` | 있음 (5/3/0, 93%) |
+| 박지후 | 8 · 360,000 | CONFIRM_REQUESTED (실행 2시간 전 학부모 요청) | `PARENT_CONFIRMED` | 있음 (6/2/0, 93% · 생성됨) |
+| 윤서아 | 8 · 360,000 | PENDING, 미입금 알림 켬 | `REMINDER_SCHEDULED` | 있음 (2/5/1, 71% · 보냄 · 열람) |
+| 이도윤 | 4 · 200,000 | PARTIAL (실행 하루 전 120,000 입금) | `PARTIAL_PAID` | 있음 (0/1/3, 50% · 보냄 · 안 읽음) |
+| 김하린 | 8 · 280,000 | PAID (실행 하루 전 전액 입금) | `NONE` | 있음 (5/3/0, 93% · 보냄 · 열람) |
 
 - 시연용 김서아(T-09 · T-14) — 고1 · 선불 · 8회 360,000원(회당 45,000). 수업은 18:00~19:30, 실행일이 월 · 수 · 금이면 월 · 수 · 금, 아니면 실행일 요일과 그 뒤 2일 · 4일 요일(오늘이 항상 수업일). 사이클 1 IN_PROGRESS에 오늘 **전** 수업일 7회의 기록 · 진도(수능특강 영어, Unit 1~14). 오늘 회차 · 청구(선불 첫 청구 포함)는 없다.
 - 안내일(`notified_at`)은 비어 있다. 목록은 `created_at`(실행 시각)으로 이번 달에 들어온다.
@@ -206,12 +210,14 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 1. 부팅 로그의 토큰을 복사하거나(기본 계정) 카카오로 로그인한 뒤 Swagger(`/swagger-ui.html`) **Authorize**에 넣는다. 부팅 로그에 김서아 `tutoringId` · 오늘 `scheduleId` · `originalDate`가 함께 찍힌다.
 2. `GET /api/v1/invoices` → 요약 1,200,000 / 400,000 / 800,000, 카드 4장(박지후 → 윤서아 → 이도윤 → 김하린).
    - 각 청구의 `reportId`로 `GET /api/v1/reports/{reportId}`와 `GET /api/v1/reports/{reportId}/invoice`를 열 수 있다.
-   - 코멘트 · 발송: `GET .../comment`(AI 초안, 확인 전) → `POST .../send`는 `REPORT409_2` → `PUT .../comment`(`text`) → `POST .../send` → `SENT`.
+   - 코멘트 · 발송 (박지후): `GET .../comment`(AI 초안, 확인 전) → `POST .../send`는 `REPORT409_2` → `PUT .../comment`(`text`) → `GET .../recipients`(공유 URL) → `POST .../send` → `SENT`.
+   - 학부모 링크: `recipients`의 `shareUrl` 토큰으로 `GET /api/v1/links/{token}/reports/{reportId}`(로그인 없음) → 목록의 `viewedAt`이 채워진다.
+   - 입금 안내 다시 보내기 (윤서아): `POST /api/v1/invoices/{invoiceId}/renotifications` → 카드 아래 줄 `RESENT`.
 3. `POST /api/v1/tutorings/{김서아 tutoringId}/records` (`scheduleId` = 오늘 요일 일정, `originalDate` = 오늘, 교재 진도 15~16) → 응답 `noInCycle: 8`, `settlement.settled = true`, `reportId` · `invoiceId`.
 4. `GET /api/v1/reports/{reportId}` → 김서아 8/8 리포트. 실제 정산으로 만든 리포트라 코멘트가 없다(`comment: null`). 보내려면 먼저 `PUT .../comment`로 작성한다.
 5. `GET /api/v1/invoices` → 1,560,000 / 400,000 / 1,160,000, 카드 5장(김서아 '다음 8회차' 360,000이 입금 대기로 추가).
 
-**배포에서 쓸 때 주의** — 시연이 끝나면 `SUDAM_SEED_ENABLED`를 끈다. `ddl-auto: create`면 재배포(재부팅)마다 처음 상태로 돌아간다. `update`에서 옛 시드(리포트 없음 · 코멘트 없음)가 이미 있으면 한 번 `SUDAM_SEED_RESET=true`로 재기동해야 리포트 · AI 초안이 생긴다. 리허설에서 보낸(SENT) 리포트도 리셋해야 다시 GENERATED로 돌아온다. 기본 계정의 토큰이 서버 로그에 남으므로 로그 접근 범위를 확인한다.
+**배포에서 쓸 때 주의** — 시연이 끝나면 `SUDAM_SEED_ENABLED`를 끈다. `ddl-auto: create`면 재배포(재부팅)마다 처음 상태로 돌아간다. `update`에서 옛 시드(리포트 없음 · 코멘트 없음)가 이미 있으면 한 번 `SUDAM_SEED_RESET=true`로 재기동해야 리포트 · AI 초안이 생긴다. 리허설에서 보낸(SENT) 박지후 리포트 · 열람 기록 · 다시 보낸 입금 안내도 리셋해야 처음 상태로 돌아온다. 기본 계정의 토큰이 서버 로그에 남으므로 로그 접근 범위를 확인한다.
 
 ## 아직 정해지지 않은 것
 

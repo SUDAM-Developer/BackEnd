@@ -5,7 +5,7 @@
 ## 공통
 
 - Base URL(로컬) `http://localhost:8080`, prefix `/api/v1`, `application/json;charset=UTF-8`
-- 인증 불필요 경로: `/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, Swagger(`/swagger-ui/**`, `/swagger-ui.html`, `/v3/api-docs/**`). 그 외는 `Authorization: Bearer {AT}` 필요.
+- 인증 불필요 경로: `/oauth2/**`, `/login/**`, `/api/v1/auth/reissue`, `/api/v1/links/**`(학부모 링크, 토큰이 열쇠), Swagger(`/swagger-ui/**`, `/swagger-ui.html`, `/v3/api-docs/**`). 그 외는 `Authorization: Bearer {AT}` 필요.
 - Swagger는 요약 · 시험 호출용이고, 에러 코드 · 쿠키 · 헤더 규칙은 이 문서가 기준이다.
 
 ### 응답 형식
@@ -34,9 +34,12 @@
 | `REPORT200_3` | 200 | 정산 리포트 코멘트를 저장하고 확인했습니다. |
 | `REPORT200_4` | 200 | 정산 리포트를 보냈습니다. |
 | `REPORT200_5` | 200 | 정산 리포트 목록을 조회했습니다. |
+| `REPORT200_6` | 200 | 정산 리포트를 받을 학부모를 조회했습니다. |
+| `REPORT200_7` | 200 | 정산 리포트를 열었습니다. |
 | `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
 | `INVOICE200_2` | 200 | 교육비 안내가 성공적으로 조회되었습니다. |
 | `INVOICE200_3` | 200 | 교육비가 성공적으로 수정되었습니다. |
+| `INVOICE200_4` | 200 | 입금 안내를 다시 보냈습니다. |
 | `INVOICE201_1` | 201 | 입금이 성공적으로 확인되었습니다. |
 
 공통 `COMMON200` · `COMMON201`은 도메인에 속하지 않는 응답에만 쓴다.
@@ -69,6 +72,9 @@
 | `RECORD409_2` | 409 | 진행 중인 수업 사이클이 없습니다. |
 | `SETTLEMENT500_1` | 500 | 정산에 적용할 과외 정책을 찾을 수 없습니다. |
 | `REPORT404_1` | 404 | 정산 리포트를 찾을 수 없습니다. |
+| `REPORT409_1` | 409 | 이미 보낸 정산 리포트는 고칠 수 없습니다. |
+| `REPORT409_2` | 409 | 코멘트를 확인한 뒤에 보낼 수 있습니다. |
+| `PARTICIPANT404_1` | 404 | 링크가 만료되었거나 올바르지 않습니다. |
 | `INVOICE404_1` | 404 | 교육비 안내를 찾을 수 없습니다. |
 | `INVOICE409_1` | 409 | 취소된 교육비 안내입니다. |
 | `INVOICE409_2` | 409 | 이미 받은 금액보다 적게 바꿀 수 없습니다. |
@@ -335,6 +341,20 @@
 | 없거나 남의 리포트 | 404 | `REPORT404_1` |
 | 코멘트 확인 전 (`reviewed: false`) | 409 | `REPORT409_2` |
 
+### 받는 사람 조회 — `GET /api/v1/reports/{reportId}/recipients` (`200`, `REPORT200_6`)
+
+리포트를 받을 학부모와 각자의 학부모 리포트 화면 URL. 프론트가 카카오톡 공유 메시지의 링크로 넣는다. 대상은 그 과외의 삭제되지 않은 학부모 중 링크 토큰이 있는 사람, 등록 순.
+
+```json
+{ "items": [ { "participantId": 31, "label": "MOTHER", "shareUrl": "https://sudam.app/l/{토큰}/reports/21" } ] }
+```
+
+- `label`: `MOTHER` 어머님 / `FATHER` 아버님 / `GUARDIAN` 보호자님.
+- `shareUrl`: 프로파일별 `app.link.report-url-template`(로컬 `http://localhost:8081/l/{token}/reports/{reportId}`, 개발 서버 `${FRONT_BASE_URL}/l/{token}/reports/{reportId}`)로 만든다. 링크는 참여자마다 하나라 토큰은 리포트와 관계없이 같다.
+- 링크를 받을 학부모가 없으면 `items`는 `[]`.
+
+에러: 없거나 남의 리포트 `REPORT404_1`.
+
 ---
 
 ## 교육비
@@ -400,6 +420,17 @@
 | 청구 없음 · 남의 과외 · 삭제된 과외 | 404 | `INVOICE404_1` |
 | 취소된 청구 / 이미 입금 완료 | 409 | `INVOICE409_1` / `INVOICE409_3` |
 
+### 입금 안내 다시 보내기 확인 — `POST /api/v1/invoices/{invoiceId}/renotifications` (`200`, `INVOICE200_4`)
+
+프론트가 [카톡으로 입금 안내 다시 보내기]의 카카오톡 공유 창을 띄운 **뒤** 호출한다. 청구 행을 잠그고 `renotified_at`을 요청 시각으로 남긴다(마지막 시각으로 덮어씀). 요청 본문 없음. 공유 기록(link_shares, `PAYMENT_RESEND`) · 웹훅은 UT 이후.
+
+응답은 입금 현황 `items[]` 한 줄과 같은 형식이다. 입금 대기(PENDING)면 `statusLine`이 `{ "type": "RESENT", "at": 다시 보낸 시각 }`('카톡으로 입금 안내를 다시 보냈어요')이 된다. 확인 대기 · 일부 입금은 `statusLine` 순서상 `PARENT_CONFIRMED` · `PARTIAL_PAID`가 먼저 보인다.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 청구 없음 · 남의 과외 · 삭제된 과외 | 404 | `INVOICE404_1` |
+| 취소된 청구 / 이미 입금 완료 | 409 | `INVOICE409_1` / `INVOICE409_3` |
+
 ### 정산 리포트 교육비 안내 조회 — `GET /api/v1/reports/{reportId}/invoice` (`200`, `INVOICE200_2`)
 
 T-14 정산 리포트의 교육비 안내 블록. `invoices.report_id = reportId`인 취소 안 된 청구 1건을 돌려준다. 리포트는 청구 ID를 갖지 않으므로 청구 쪽에서 바로 찾는다. 요청 본문 없음.
@@ -454,6 +485,36 @@ T-14 교육비 수정 시트 [저장]. 청구 행을 잠그고(FOR UPDATE) 금�
 | 필드 검증 실패 (`result`에 필드별 메시지, 예: `{ "amount": "교육비는 0원 이상이어야 합니다." }`), 깨진 JSON | 400 | `COMMON400` |
 | 청구 없음 · 남의 과외 · 삭제된 과외 | 404 | `INVOICE404_1` |
 | 취소된 청구 / 이미 받은 금액보다 적게 / 함께 보낸 리포트가 발송 완료(SENT) | 409 | `INVOICE409_1` / `INVOICE409_2` / `INVOICE409_4` |
+
+---
+
+## 학부모 링크
+
+학부모가 카카오톡 메시지의 링크로 여는 화면용 API. **로그인 없이** 경로의 참여자 링크 토큰(`participants.link_token`)으로 본인을 확인한다 (`SecurityConfig.allowUris`의 `/api/v1/links/**`). `Authorization` 헤더를 보내지 않는다.
+
+링크 확인 (ERD 9.1.1): 토큰으로 참여자 조회 → 삭제된 참여자 · 삭제된 과외 · 만료(`link_expires_at` 지남, 진행 중 과외는 만료 없음) · 학부모가 아님이면 모두 `PARTICIPANT404_1`. 어느 경우인지 구분해 알려 주지 않는다. 첫 입장 수신 동의(9.1.2) · 없는 토큰 반복 요청 제한은 아직 없다.
+
+### 학부모 정산 리포트 열기 — `GET /api/v1/links/{token}/reports/{reportId}` (`200`, `REPORT200_7`)
+
+그 학부모 과외의 **보낸(SENT)** 리포트만 열린다. 처음 열면 `settlement_report_views`에 첫 열람 시각을 남겨 선생님 리포트 목록의 `viewedAt`에 나타난다. 다시 열어도 첫 열람 시각은 바뀌지 않는다.
+
+```json
+{
+  "report": { "reportId": 21, "status": "SENT", "studentName": "윤서아", "period": { … }, "stats": { … }, "progress": [ … ], "understandingLevel": "MEDIUM" },
+  "comment": "이번 달 서아는 …",
+  "teacherName": "한서윤",
+  "sentAt": "2026-10-01T09:20:00"
+}
+```
+
+- `report`: 선생님 `GET /reports/{reportId}`와 같은 형식.
+- 교육비 안내(금액 · 입금 계좌)는 아직 담지 않는다.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `reportId`가 숫자가 아님 | 400 | `COMMON400` |
+| 링크가 없거나 만료 · 폐기, 삭제된 참여자 · 과외, 학부모가 아님 | 404 | `PARTICIPANT404_1` |
+| 리포트가 없음 · 다른 과외의 리포트 · 아직 보내지 않음 | 404 | `REPORT404_1` |
 
 ---
 
