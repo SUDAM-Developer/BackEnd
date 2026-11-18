@@ -2,7 +2,12 @@ package com.sudam.domain.report.service;
 
 import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.record.enums.Understanding;
+import com.sudam.domain.participant.entity.Participant;
+import com.sudam.domain.participant.enums.ParticipantLabel;
+import com.sudam.domain.participant.enums.ParticipantRole;
+import com.sudam.domain.participant.repository.ParticipantRepository;
 import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
+import com.sudam.domain.report.dto.response.ReportRecipientListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.entity.SettlementReportProgress;
@@ -60,6 +65,8 @@ class ReportServiceTest {
     @Mock private SettlementReportProgressRepository settlementReportProgressRepository;
     @Mock private SessionRepository sessionRepository;
     @Mock private SettlementReportViewRepository settlementReportViewRepository;
+    @Mock private ParticipantRepository participantRepository;
+    @Mock private ReportShareUrlFactory reportShareUrlFactory;
 
     @InjectMocks
     private ReportService reportService;
@@ -197,6 +204,40 @@ class ReportServiceTest {
         return withId(SettlementReport.builder().tutoring(report.getTutoring()).cycle(cycle)
                 .completedCount(8).targetCount(8).canceledCount(0).homeworkRate(null).prevHomeworkRate(null)
                 .understandingHigh(0).understandingMedium(0).understandingLow(0).build(), 22L);
+    }
+
+    @Test
+    @DisplayName("받는 사람은 그 과외의 링크가 있는 학부모이고, 각자의 토큰과 리포트 ID로 만든 URL을 담는다")
+    void 받는_사람_조회() {
+        // given
+        Participant mother = withId(Participant.createParent(report.getTutoring(), ParticipantLabel.MOTHER,
+                "01000000001"), 31L);
+        mother.issueLinkToken("mother-token", LocalDateTime.of(2026, 9, 1, 0, 0));
+        given(settlementReportRepository.findWithTutoringById(REPORT_ID)).willReturn(Optional.of(report));
+        given(participantRepository.findLinkHolders(10L, ParticipantRole.PARENT)).willReturn(List.of(mother));
+        given(reportShareUrlFactory.reportUrl("mother-token", REPORT_ID))
+                .willReturn("https://sudam.app/l/mother-token/reports/21");
+
+        // when
+        ReportRecipientListResponse response = reportService.listRecipients(TEACHER_ID, REPORT_ID);
+
+        // then
+        assertThat(response.items()).containsExactly(new ReportRecipientListResponse.Item(
+                31L, ParticipantLabel.MOTHER, "https://sudam.app/l/mother-token/reports/21"));
+    }
+
+    @Test
+    @DisplayName("다른 선생님 리포트의 받는 사람을 조회하면 REPORT404_1이고 학부모를 조회하지 않는다")
+    void 다른_선생님_받는_사람() {
+        // given
+        given(settlementReportRepository.findWithTutoringById(REPORT_ID)).willReturn(Optional.of(report));
+
+        // when & then
+        assertThatThrownBy(() -> reportService.listRecipients(OTHER_TEACHER_ID, REPORT_ID))
+                .isInstanceOf(ReportException.class)
+                .extracting(e -> ((ProjectException) e).getErrorCode().getCode())
+                .isEqualTo("REPORT404_1");
+        then(participantRepository).should(never()).findLinkHolders(any(), any());
     }
 
     @Test

@@ -1,7 +1,9 @@
 package com.sudam.domain.report.controller;
 
 import com.sudam.domain.report.dto.response.ReportCommentResponse;
+import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
+import com.sudam.domain.report.dto.response.ReportRecipientListResponse;
 import com.sudam.domain.report.dto.response.ReportSendResponse;
 import com.sudam.domain.report.enums.AiStatus;
 import com.sudam.domain.report.enums.CommentSource;
@@ -89,6 +91,23 @@ class ReportControllerTest {
                 .andExpect(jsonPath("$.result.items[1].sentAt").doesNotExist())
                 .andExpect(jsonPath("$.result.items[1].viewedAt").doesNotExist());
         then(reportService).should(never()).get(anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("받는 사람 조회는 200 · REPORT200_6이고 학부모마다 호칭 · 공유 URL을 내려준다")
+    void 받는_사람_조회() throws Exception {
+        // given
+        given(reportService.listRecipients(TEACHER_ID, 21L)).willReturn(new ReportRecipientListResponse(List.of(
+                new ReportRecipientListResponse.Item(31L, ParticipantLabel.MOTHER,
+                        "https://sudam.app/l/mother-token/reports/21"))));
+
+        // when & then
+        mockMvc.perform(get("/api/v1/reports/21/recipients").with(teacher()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("REPORT200_6"))
+                .andExpect(jsonPath("$.result.items[0].participantId").value(31))
+                .andExpect(jsonPath("$.result.items[0].label").value("MOTHER"))
+                .andExpect(jsonPath("$.result.items[0].shareUrl").value("https://sudam.app/l/mother-token/reports/21"));
     }
 
     @Test

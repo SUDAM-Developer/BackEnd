@@ -9,8 +9,11 @@ import com.sudam.domain.participant.repository.ParticipantRepository;
 import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.report.entity.SettlementReport;
+import com.sudam.domain.report.entity.SettlementReportView;
 import com.sudam.domain.report.enums.CommentSource;
+import com.sudam.domain.report.enums.ReportStatus;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
 import com.sudam.domain.settlement.port.SettlementReportCreator;
@@ -87,6 +90,7 @@ class DemoSeedServiceTest {
     @Mock private SessionProgressRepository sessionProgressRepository;
     @Mock private SettlementReportCreator settlementReportCreator;
     @Mock private SettlementReportRepository settlementReportRepository;
+    @Mock private SettlementReportViewRepository settlementReportViewRepository;
     @Mock private DemoSeedResetter demoSeedResetter;
     @Mock private Clock clock;
 
@@ -116,7 +120,7 @@ class DemoSeedServiceTest {
                 tutoringScheduleRepository, textbookRepository, tutoringPolicyRepository, tutoringSettingRepository,
                 participantRepository, cycleRepository, invoiceRepository, sessionRepository,
                 sessionRecordRepository, sessionProgressRepository, settlementReportCreator, settlementReportRepository,
-                demoSeedResetter);
+                settlementReportViewRepository, demoSeedResetter);
     }
 
     @Test
@@ -190,21 +194,40 @@ class DemoSeedServiceTest {
     }
 
     @Test
-    @DisplayName("수입 카드 리포트마다 그 학생의 AI 초안 코멘트가 확인 전 상태로 들어간다 (UT에서 AI 생성 대신)")
+    @DisplayName("수입 카드 리포트마다 그 학생의 AI 초안이 들어가고, 박지후만 확인 전 GENERATED로 남는다 (UT 시작 상태)")
     void 리포트에_AI_초안_코멘트() {
         // given
         SeedCapture capture = seedAll();
 
         // when
-        Map<String, Cycle> firstCycles = capture.firstCycles();
+        Map<String, SettlementReport> reports = capture.reportsByStudent();
 
         // then
         for (DemoIncomeCard card : DemoIncomeCard.ALL) {
-            SettlementReport report = capture.reports().get(firstCycles.get(card.studentName()).getId() + REPORT_ID_OFFSET);
+            SettlementReport report = reports.get(card.studentName());
             assertThat(report.getComment()).isEqualTo(card.aiDraftComment());
-            assertThat(report.getCommentSource()).isEqualTo(CommentSource.AI_DRAFT);
-            assertThat(report.isCommentReviewed()).isFalse();
         }
+        assertThat(reports.get("박지후").getCommentSource()).isEqualTo(CommentSource.AI_DRAFT);
+        assertThat(reports.get("박지후").isCommentReviewed()).isFalse();
+        assertThat(reports.get("박지후").getStatus()).isEqualTo(ReportStatus.GENERATED);
+        assertThat(List.of("윤서아", "이도윤", "김하린")).allSatisfy(name ->
+                assertThat(reports.get(name).getStatus()).isEqualTo(ReportStatus.SENT));
+    }
+
+    @Test
+    @DisplayName("보내고 학부모가 연 리포트(윤서아 · 김하린)만 첫 열람을 저장한다")
+    void 열람한_리포트만_열람_저장() {
+        // given
+        SeedCapture capture = seedAll();
+        Map<String, SettlementReport> reports = capture.reportsByStudent();
+
+        // when
+        ArgumentCaptor<SettlementReportView> views = ArgumentCaptor.forClass(SettlementReportView.class);
+        verify(settlementReportViewRepository, times(2)).save(views.capture());
+
+        // then
+        assertThat(views.getAllValues()).extracting(SettlementReportView::getReport)
+                .containsExactly(reports.get("윤서아"), reports.get("김하린"));
     }
 
     @Test
@@ -305,6 +328,13 @@ class DemoSeedServiceTest {
                     .filter(cycle -> cycle.getCycleNo() == 1)
                     .filter(cycle -> !cycle.getTutoring().getStudentName().equals(DemoLessonPlan.STUDENT_NAME))
                     .collect(Collectors.toMap(cycle -> cycle.getTutoring().getStudentName(), cycle -> cycle));
+        }
+
+        // 수입 카드 과외의 사이클 1 리포트 (학생 이름 → 리포트).
+        Map<String, SettlementReport> reportsByStudent() {
+            return firstCycles().entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey,
+                            entry -> reports.get(entry.getValue().getId() + REPORT_ID_OFFSET)));
         }
     }
 }
