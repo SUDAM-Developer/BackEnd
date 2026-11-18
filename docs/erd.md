@@ -760,7 +760,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | `participant_id` | BIGINT UNSIGNED | PK, FK → participants |  |
 | `first_viewed_at` | DATETIME | NOT NULL | 첫 열람 시각. 행이 있으면 읽음 |
 - 학부모 2명이면 한 명이라도 열면 읽음 (6.2.5).
-- 구현 메모 (#45): 엔티티 `SettlementReportView`, 복합 키 `SettlementReportViewId`(`@EmbeddedId` + `@MapsId`). 리포트 목록의 `viewedAt`은 리포트별 MIN(first_viewed_at)이에요. 기록을 쌓는 학부모 열람 API는 아직 없어요. 시드 리셋은 이 테이블을 `settlement_report_progress`보다 먼저 지워요.
+- 구현 메모 (#45): 엔티티 `SettlementReportView`, 복합 키 `SettlementReportViewId`(`@EmbeddedId` + `@MapsId`). 리포트 목록의 `viewedAt`은 리포트별 MIN(first_viewed_at)이에요. 학부모 링크 API(`GET /api/v1/links/{token}/reports/{reportId}`, #47)가 처음 열 때 기록해요 (INSERT … ON DUPLICATE KEY UPDATE로 첫 시각 유지, 학부모만). 시드 리셋은 이 테이블을 `settlement_report_progress`보다 먼저 지워요.
 
 ### invoices (교육비 청구)
 

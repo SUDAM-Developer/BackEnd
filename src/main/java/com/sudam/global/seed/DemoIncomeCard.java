@@ -6,6 +6,8 @@ import com.sudam.domain.invoice.enums.InvoiceKind;
 import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.record.enums.HomeworkResult;
 import com.sudam.domain.record.enums.Understanding;
+import com.sudam.domain.report.entity.SettlementReport;
+import com.sudam.domain.report.entity.SettlementReportView;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
 import com.sudam.global.seed.DemoLessonPlan.LessonNote;
 
@@ -14,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 import static java.time.DayOfWeek.FRIDAY;
 import static java.time.DayOfWeek.MONDAY;
@@ -39,6 +42,7 @@ import static java.time.DayOfWeek.WEDNESDAY;
  * @param textbookName           교재 1권 이름
  * @param notes                  사이클 1 회차 기록 (정산 회차만큼, 오래된 순)
  * @param aiDraftComment         사이클 1 리포트의 AI 초안 코멘트 (UT에서는 AI 생성 대신 시드가 넣는다)
+ * @param reportState            사이클 1 리포트를 어떤 상태로 둘지 (UT T-13 시작 상태)
  */
 record DemoIncomeCard(
         String studentName,
@@ -51,8 +55,13 @@ record DemoIncomeCard(
         LocalTime lessonStart,
         String textbookName,
         List<LessonNote> notes,
-        String aiDraftComment
+        String aiDraftComment,
+        ReportState reportState
 ) {
+
+    // 정산 뒤 선생님이 코멘트를 확인해 보내기까지, 보낸 뒤 학부모가 열기까지의 간격.
+    static final long SENT_HOURS_AFTER_SETTLEMENT = 1;
+    static final long VIEWED_HOURS_AFTER_SENT = 3;
 
     static final int PARTIAL_PAID_AMOUNT = 120_000;
 
@@ -121,20 +130,45 @@ record DemoIncomeCard(
             + "다음 달에는 비슷한 뜻 단어를 구분하는 연습을 더하겠습니다.";
 
     // 카드 표시 순서(확인 대기 → 입금 대기 → 일부 입금 → 입금 완료)와 같은 순서로 둔다. 시간은 김서아(18:00~19:30)와 겹치지 않게 골랐다.
+    // 리포트 상태는 UT 설계서 시작 상태: 박지후만 '생성됨'(T1 · T2에서 확인 · 발송), 윤서아는 열람함, 이도윤은 안 읽음(T3).
+    // 김하린은 설계서에 없지만 목록의 '생성됨'을 박지후 한 장으로 두려고 보내고 열람한 상태로 둔다.
     static final List<DemoIncomeCard> ALL = List.of(
             new DemoIncomeCard("박지후", 8, 8, 360_000, PaymentState.CONFIRM_REQUESTED, false,
                     List.of(TUESDAY, THURSDAY), LocalTime.of(16, 0), "천일문 기본", JIHU_NOTES,
-                    JIHU_COMMENT),
+                    JIHU_COMMENT, ReportState.GENERATED),
             new DemoIncomeCard("윤서아", 9, 8, 360_000, PaymentState.PENDING, true,
                     List.of(MONDAY, WEDNESDAY), LocalTime.of(16, 0), "리딩튜터 중급", SEOA_NOTES,
-                    SEOA_COMMENT),
+                    SEOA_COMMENT, ReportState.SENT_VIEWED),
             new DemoIncomeCard("이도윤", 11, 4, 200_000, PaymentState.PARTIAL, false,
                     List.of(SATURDAY), LocalTime.of(10, 0), "Grammar Zone 기본", DOYUN_NOTES,
-                    DOYUN_COMMENT),
+                    DOYUN_COMMENT, ReportState.SENT_UNREAD),
             new DemoIncomeCard("김하린", 7, 8, 280_000, PaymentState.PAID, false,
                     List.of(TUESDAY, FRIDAY), LocalTime.of(20, 0), "능률 VOCA 중학", HARIN_NOTES,
-                    HARIN_COMMENT)
+                    HARIN_COMMENT, ReportState.SENT_VIEWED)
     );
+
+    /***
+     * 함수 기능: AI 초안을 넣은 사이클 1 리포트를 카드의 리포트 상태로 만든다.
+     *          보낸 상태면 선생님이 초안을 그대로 확인한 뒤 보낸 것으로 두고(실제 API와 같은 엔티티 메서드),
+     *          열람한 상태면 학부모 첫 열람을 돌려준다.
+     * @param report    AI 초안 코멘트가 들어간 사이클 1 리포트 (저장된 것)
+     * @param parent    리포트를 받은 학부모 (저장된 것)
+     * @param settledAt 사이클 1 정산 시각
+     * @return 학부모 첫 열람 (열람한 상태일 때만). 저장은 호출하는 쪽이 한다
+     */
+    Optional<SettlementReportView> deliverReport(SettlementReport report, Participant parent,
+                                                 LocalDateTime settledAt) {
+        if (reportState == ReportState.GENERATED) {
+            return Optional.empty();
+        }
+        LocalDateTime sentAt = settledAt.plusHours(SENT_HOURS_AFTER_SETTLEMENT);
+        report.reviewComment(aiDraftComment, sentAt);
+        report.markSent(sentAt);
+        if (reportState == ReportState.SENT_UNREAD) {
+            return Optional.empty();
+        }
+        return Optional.of(SettlementReportView.firstView(report, parent, sentAt.plusHours(VIEWED_HOURS_AFTER_SENT)));
+    }
 
     /***
      * 함수 기능: 사이클 1 회차 날짜를 고른다. 사이클 시작일부터 수업 요일을 앞으로 세어 기록 수만큼.
@@ -171,6 +205,12 @@ record DemoIncomeCard(
             case PAID -> invoice.recordPayment(null, now.minusDays(1));
         }
         return invoice;
+    }
+
+    enum ReportState {
+        GENERATED, // 생성됨 (AI 초안, 확인 전)
+        SENT_UNREAD, // 발송 완료 · 학부모가 아직 안 읽음
+        SENT_VIEWED // 발송 완료 · 학부모 열람함
     }
 
     enum PaymentState {

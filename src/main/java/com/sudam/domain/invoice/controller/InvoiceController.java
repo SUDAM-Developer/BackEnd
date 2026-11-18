@@ -1,6 +1,7 @@
 package com.sudam.domain.invoice.controller;
 
 import com.sudam.domain.invoice.dto.request.ConfirmPaymentRequest;
+import com.sudam.domain.invoice.dto.response.InvoiceItemResponse;
 import com.sudam.domain.invoice.dto.response.InvoiceListResponse;
 import com.sudam.domain.invoice.dto.response.PaymentConfirmResponse;
 import com.sudam.domain.invoice.exception.code.InvoiceSuccessCode;
@@ -27,7 +28,7 @@ import java.time.YearMonth;
 
 // 단일 파라미터(month) 제약은 스프링 내장 메서드 검증으로 처리한다.
 // 클래스에 @Validated를 붙이면 AOP 검증으로 바뀌어 ConstraintViolationException(→ COMMON500)이 나므로 붙이지 않는다.
-@Tag(name = "교육비", description = "수입 탭 입금 현황 · 입금 확인 API")
+@Tag(name = "교육비", description = "수입 탭 입금 현황 · 입금 확인 · 입금 안내 다시 보내기 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/invoices")
@@ -66,5 +67,16 @@ public class InvoiceController {
         return ResponseEntity
                 .status(InvoiceSuccessCode.PAYMENT_CONFIRMED.getStatus())
                 .body(ApiResponse.onSuccess(InvoiceSuccessCode.PAYMENT_CONFIRMED, response));
+    }
+
+    @Operation(summary = "입금 안내 다시 보내기 확인",
+            description = "카카오톡 공유 창으로 입금 안내를 다시 보낸 뒤 호출한다. 다시 보낸 시각을 남기고 바뀐 교육비 한 줄을 돌려준다 "
+                    + "(입금 대기면 아래 줄 RESENT). 다시 부르면 시각만 새로 바뀐다. "
+                    + "내 과외의 청구가 아니면 INVOICE404_1, 취소된 청구는 INVOICE409_1, 이미 완납이면 INVOICE409_3.")
+    @PostMapping("/{invoiceId}/renotifications")
+    public ApiResponse<InvoiceItemResponse> renotify(@AuthenticationPrincipal CustomOAuth2User principal,
+                                                     @PathVariable Long invoiceId) {
+        return ApiResponse.onSuccess(InvoiceSuccessCode.RENOTIFIED,
+                invoiceService.renotify(principal.getUserId(), invoiceId));
     }
 }

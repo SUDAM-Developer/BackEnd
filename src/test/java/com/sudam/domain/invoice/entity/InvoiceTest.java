@@ -449,6 +449,50 @@ class InvoiceTest {
     }
 
     @Nested
+    @DisplayName("renotify")
+    class Renotify {
+
+        @Test
+        @DisplayName("입금 대기 · 일부 입금 · 확인 대기면 다시 보낸 시각을 마지막 값으로 덮어쓴다")
+        void 다시_보낸_시각_덮어쓰기() {
+            // given
+            Invoice invoice = invoice();
+            invoice.renotify(NOW);
+            invoice.recordPayment(100_000, NOW);
+            invoice.requestConfirm(parent(), NOW.plusHours(1));
+
+            // when
+            invoice.renotify(NOW.plusDays(1));
+
+            // then
+            assertThat(invoice.getRenotifiedAt()).isEqualTo(NOW.plusDays(1));
+        }
+
+        @Test
+        @DisplayName("이미 입금 완료면 INVOICE409_3이고 시각을 남기지 않는다")
+        void 완납이면_거절() {
+            // given
+            Invoice invoice = invoice();
+            invoice.recordPayment(null, NOW);
+
+            // when & then
+            assertErrorCode(() -> invoice.renotify(NOW), "INVOICE409_3");
+            assertThat(invoice.getRenotifiedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("취소된 청구면 INVOICE409_1이다")
+        void 취소면_거절() {
+            // given
+            Invoice invoice = invoice();
+            invoice.cancel(NOW);
+
+            // when & then
+            assertErrorCode(() -> invoice.renotify(NOW), "INVOICE409_1");
+        }
+    }
+
+    @Nested
     @DisplayName("cancel")
     class Cancel {
 

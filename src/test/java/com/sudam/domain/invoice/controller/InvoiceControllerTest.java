@@ -173,6 +173,37 @@ class InvoiceControllerTest {
                 .andExpect(jsonPath("$.code").value("INVOICE404_1"));
     }
 
+    @Test
+    @DisplayName("입금 안내 다시 보내기는 본문 없이 200 · INVOICE200_4이고 RESENT 한 줄을 내려준다")
+    void 입금_안내_다시_보내기() throws Exception {
+        // given
+        given(invoiceService.renotify(TEACHER_ID, 10L)).willReturn(new InvoiceItemResponse(
+                10L, 100L, "서아", "다음 8회차", 360_000, 0, 360_000, 0, InvoiceStatus.PENDING,
+                new InvoiceItemResponse.StatusLine(InvoiceStatusLineType.RESENT, NOV_15), 5L, NOV_15, NOV_15));
+
+        // when & then
+        mockMvc.perform(post("/api/v1/invoices/10/renotifications").with(teacher()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.isSuccess").value(true))
+                .andExpect(jsonPath("$.code").value("INVOICE200_4"))
+                .andExpect(jsonPath("$.result.invoiceId").value(10))
+                .andExpect(jsonPath("$.result.statusLine.type").value("RESENT"))
+                .andExpect(jsonPath("$.result.statusLine.at").value("2026-11-15T20:00:00"));
+    }
+
+    @Test
+    @DisplayName("입금 완료된 청구에 다시 보내면 409 · INVOICE409_3 실패 응답이다")
+    void 완납_다시_보내기() throws Exception {
+        // given
+        given(invoiceService.renotify(TEACHER_ID, 10L))
+                .willThrow(new InvoiceException(InvoiceErrorCode.ALREADY_PAID));
+
+        // when & then
+        mockMvc.perform(post("/api/v1/invoices/10/renotifications").with(teacher()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INVOICE409_3"));
+    }
+
     private static InvoiceItemResponse item(InvoiceStatus status, int paidAmount) {
         return new InvoiceItemResponse(10L, 100L, "서아", "이번 8회차", 360_000, paidAmount, 360_000 - paidAmount, 0,
                 status, new InvoiceItemResponse.StatusLine(

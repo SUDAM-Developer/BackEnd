@@ -7,6 +7,8 @@ import com.sudam.domain.invoice.enums.InvoiceStatus;
 import com.sudam.domain.invoice.enums.InvoiceStatusLineType;
 import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.participant.enums.ParticipantLabel;
+import com.sudam.domain.report.entity.SettlementReport;
+import com.sudam.domain.report.enums.ReportStatus;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
@@ -120,8 +122,69 @@ class DemoIncomeCardTest {
 
         // when & then
         assertThatThrownBy(() -> new DemoIncomeCard("테스트", 7, 4, 200_000, DemoIncomeCard.PaymentState.PENDING,
-                false, List.of(DayOfWeek.MONDAY), LocalTime.of(16, 0), "교재", threeNotes, "초안"))
+                false, List.of(DayOfWeek.MONDAY), LocalTime.of(16, 0), "교재", threeNotes, "초안",
+                DemoIncomeCard.ReportState.GENERATED))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("리포트 시작 상태는 UT 설계서대로 박지후 생성됨 · 윤서아 열람 · 이도윤 안 읽음이고, 김하린은 열람이다")
+    void 리포트_시작_상태() {
+        // when
+        Map<String, DemoIncomeCard.ReportState> states = DemoIncomeCard.ALL.stream()
+                .collect(Collectors.toMap(DemoIncomeCard::studentName, DemoIncomeCard::reportState));
+
+        // then
+        assertThat(states).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "박지후", DemoIncomeCard.ReportState.GENERATED,
+                "윤서아", DemoIncomeCard.ReportState.SENT_VIEWED,
+                "이도윤", DemoIncomeCard.ReportState.SENT_UNREAD,
+                "김하린", DemoIncomeCard.ReportState.SENT_VIEWED));
+    }
+
+    @Test
+    @DisplayName("생성됨이면 리포트를 그대로 두고, 보낸 상태면 초안을 확인해 보내며, 열람 상태만 정산 4시간 뒤 첫 열람을 돌려준다")
+    void 리포트_상태_만들기() {
+        // given
+        LocalDateTime settledAt = NOW.minusDays(7);
+        Participant parent = Participant.createParent(null, ParticipantLabel.MOTHER, "01000000001");
+        Map<DemoIncomeCard.ReportState, DemoIncomeCard> cardByState = DemoIncomeCard.ALL.stream()
+                .collect(Collectors.toMap(DemoIncomeCard::reportState, card -> card, (first, second) -> first));
+
+        // when
+        SettlementReport generated = draftedReport(cardByState.get(DemoIncomeCard.ReportState.GENERATED));
+        SettlementReport unread = draftedReport(cardByState.get(DemoIncomeCard.ReportState.SENT_UNREAD));
+        SettlementReport viewed = draftedReport(cardByState.get(DemoIncomeCard.ReportState.SENT_VIEWED));
+        var generatedView = cardByState.get(DemoIncomeCard.ReportState.GENERATED)
+                .deliverReport(generated, parent, settledAt);
+        var unreadView = cardByState.get(DemoIncomeCard.ReportState.SENT_UNREAD)
+                .deliverReport(unread, parent, settledAt);
+        var viewedView = cardByState.get(DemoIncomeCard.ReportState.SENT_VIEWED)
+                .deliverReport(viewed, parent, settledAt);
+
+        // then
+        assertThat(generatedView).isEmpty();
+        assertThat(generated.getStatus()).isEqualTo(ReportStatus.GENERATED);
+        assertThat(generated.isCommentReviewed()).isFalse();
+
+        assertThat(unreadView).isEmpty();
+        assertThat(unread.getStatus()).isEqualTo(ReportStatus.SENT);
+        assertThat(unread.getSentAt()).isEqualTo(settledAt.plusHours(1));
+
+        assertThat(viewed.getStatus()).isEqualTo(ReportStatus.SENT);
+        assertThat(viewedView).hasValueSatisfying(view -> {
+            assertThat(view.getReport()).isSameAs(viewed);
+            assertThat(view.getParticipant()).isSameAs(parent);
+            assertThat(view.getFirstViewedAt()).isEqualTo(settledAt.plusHours(4));
+        });
+    }
+
+    private static SettlementReport draftedReport(DemoIncomeCard card) {
+        SettlementReport report = SettlementReport.builder()
+                .completedCount(8).targetCount(8).canceledCount(0)
+                .understandingHigh(0).understandingMedium(0).understandingLow(0).build();
+        report.draftComment(card.aiDraftComment());
+        return report;
     }
 
     @Test
