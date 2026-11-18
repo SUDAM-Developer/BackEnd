@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-14 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
+> 최종 수정: 2026-11-18 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
 
 ## 공통
 
@@ -30,6 +30,10 @@
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `REPORT200_1` | 200 | 정산 리포트를 조회했습니다. |
+| `REPORT200_2` | 200 | 정산 리포트 코멘트를 조회했습니다. |
+| `REPORT200_3` | 200 | 정산 리포트 코멘트를 저장하고 확인했습니다. |
+| `REPORT200_4` | 200 | 정산 리포트를 보냈습니다. |
+| `REPORT200_5` | 200 | 정산 리포트 목록을 조회했습니다. |
 | `INVOICE200_1` | 200 | 입금 현황이 성공적으로 조회되었습니다. |
 | `INVOICE200_2` | 200 | 교육비 안내가 성공적으로 조회되었습니다. |
 | `INVOICE200_3` | 200 | 교육비가 성공적으로 수정되었습니다. |
@@ -220,6 +224,32 @@
 
 ## 정산 리포트
 
+### 정산 리포트 목록 조회 — `GET /api/v1/reports/deliveries` (`200`, `REPORT200_5`)
+
+리포트 목록 화면(T-13). **내 과외**(삭제되지 않음, 종료 포함)의 리포트를 최근에 만든 순(`reportId` 큰 순)으로 돌려준다. 요청 파라미터 없음, 페이징 없음.
+
+```json
+{
+  "items": [
+    {
+      "reportId": 22, "tutoringId": 4, "studentName": "박지후", "settlementMonth": "2026-09",
+      "status": "SENT", "sentAt": "2026-10-01T09:20:00", "viewedAt": "2026-10-01T21:05:00",
+      "createdAt": "2026-09-30T21:00:00"
+    },
+    {
+      "reportId": 21, "tutoringId": 3, "studentName": "윤서아", "settlementMonth": "2026-09",
+      "status": "GENERATED", "sentAt": null, "viewedAt": null, "createdAt": "2026-09-29T20:00:00"
+    }
+  ]
+}
+```
+
+- `settlementMonth`: 정산 월(`YYYY-MM`). 사이클 첫 인정 회차의 월이다. 사이클은 직전 정산 순간에 열려 시작 시각이 앞 달일 수 있으므로 시작 시각이 아니라 첫 인정 회차를 기준으로 한다. 인정 회차가 없으면 사이클 시작월.
+- `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT` ("보냄" 표시). `sentAt`: 첫 발송 확인 시각, 보내지 않았으면 `null`.
+- `viewedAt`: 첫 열람 시각(`settlement_report_views.first_viewed_at`). 학부모가 둘이면 먼저 연 시각. 열람 기록이 없으면 `null` (UT 시점에는 학부모 열람 API가 없어 항상 `null`).
+- `createdAt`: 리포트를 만든 시각 (정산 시각).
+- 리포트가 없으면 `items`는 `[]`.
+
 ### 정산 리포트 조회 — `GET /api/v1/reports/{reportId}` (`200`, `REPORT200_1`)
 
 본인 과외의 리포트만. 네 영역(요약 · 진도 · 코멘트 · 교육비) 중 요약 · 진도를 돌려준다. 통계 · 진도는 정산 시점에 고정되고, `period`만 조회 때 인정 회차로 계산한다.
@@ -238,13 +268,15 @@
   "progress": [
     { "textbookName": "수능특강 영어", "startLabel": "3강", "endLabel": "9강", "textbookStatus": "ACTIVE" },
     { "textbookName": "Grammar Zone 기본", "startLabel": "Unit 12", "endLabel": "Unit 20", "textbookStatus": "ACTIVE" }
-  ]
+  ],
+  "understandingLevel": "HIGH"
 }
 ```
 
 - `status`: 발송 확인(`POST /send`) 전 `GENERATED`, 후 `SENT`. `textbookStatus`: 교재 추가 · 종료 기능 전까지 `ACTIVE`.
 - `period`: 사이클 인정 회차의 첫 · 마지막 수업일. `canceledCount`: 그 기간의 휴강 수.
 - `homeworkRate`: (DONE + PARTIAL × 0.5) ÷ 지난 숙제 결과가 있는 기록 수, % 반올림. 결과가 없으면 `null`. `prevHomeworkRate`: 직전 사이클 리포트 값, 없으면 `null`.
+- `understandingLevel`: 이해도 수준 `HIGH` / `MEDIUM` / `LOW`. `understanding` 횟수로 조회 때 계산한다. 상 3 · 중 2 · 하 1점 가중평균이 2.5 이상이면 `HIGH`, 1.5 이상이면 `MEDIUM`, 그 아래 `LOW`. 이해도 기록이 0건이면 `null`.
 - `progress`: 교재 ID 순, 사이클 첫 회차 시작 ~ 마지막 회차 끝 진도. 라벨 `Unit 12` · `Chapter 3` · `3단원` · `45p` · `3회`, 직접 입력 단위는 숫자 + 단위(`9강`). 진도 기록이 없는 교재는 빠진다.
 
 에러: `reportId`가 숫자가 아님 `COMMON400` / 없거나 남의 리포트 `REPORT404_1`.

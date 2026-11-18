@@ -1,5 +1,6 @@
 package com.sudam.domain.report.entity;
 
+import com.sudam.domain.record.enums.Understanding;
 import com.sudam.domain.report.enums.CommentSource;
 import com.sudam.domain.report.enums.DeliveryMethod;
 import com.sudam.domain.report.enums.ReportStatus;
@@ -7,13 +8,15 @@ import com.sudam.global.exception.ProjectException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DisplayName("SettlementReport 코멘트 확인 · 발송 상태 변경")
+@DisplayName("SettlementReport 이해도 수준 · 코멘트 확인 · 발송 상태 변경")
 class SettlementReportTest {
 
     private static final LocalDateTime REVIEWED_AT = LocalDateTime.of(2026, 10, 1, 9, 12, 40);
@@ -26,6 +29,41 @@ class SettlementReportTest {
         report = SettlementReport.builder()
                 .completedCount(8).targetCount(8).canceledCount(0)
                 .understandingHigh(5).understandingMedium(3).understandingLow(0).build();
+    }
+
+    @ParameterizedTest(name = "상 {0} · 중 {1} · 하 {2} → {3}")
+    @CsvSource({
+            "1, 1, 0, HIGH",     // 평균 2.5 (HIGH 경계)
+            "5, 3, 0, HIGH",     // 2.625 (시드 김하린)
+            "6, 2, 0, HIGH",     // 2.75 (시드 박지후)
+            "4, 5, 0, MEDIUM",   // 2.44… (HIGH 바로 아래)
+            "2, 5, 1, MEDIUM",   // 2.125 (시드 윤서아)
+            "0, 1, 1, MEDIUM",   // 1.5 (MEDIUM 경계)
+            "0, 1, 2, LOW",      // 1.33… (MEDIUM 바로 아래)
+            "0, 1, 3, LOW",      // 1.25 (시드 이도윤)
+            "0, 0, 4, LOW"       // 1.0
+    })
+    @DisplayName("이해도 가중평균이 2.5 이상이면 HIGH, 1.5 이상이면 MEDIUM, 그 아래는 LOW다")
+    void 이해도_수준(int high, int medium, int low, Understanding expected) {
+        // given
+        SettlementReport counted = SettlementReport.builder()
+                .completedCount(8).targetCount(8).canceledCount(0)
+                .understandingHigh(high).understandingMedium(medium).understandingLow(low).build();
+
+        // when & then
+        assertThat(counted.understandingLevel()).contains(expected);
+    }
+
+    @Test
+    @DisplayName("이해도 기록이 하나도 없으면 이해도 수준은 빈 값이다")
+    void 이해도_기록_없음() {
+        // given
+        SettlementReport empty = SettlementReport.builder()
+                .completedCount(8).targetCount(8).canceledCount(0)
+                .understandingHigh(0).understandingMedium(0).understandingLow(0).build();
+
+        // when & then
+        assertThat(empty.understandingLevel()).isEmpty();
     }
 
     @Test

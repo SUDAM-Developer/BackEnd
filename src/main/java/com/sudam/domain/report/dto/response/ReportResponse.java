@@ -16,7 +16,7 @@ public record ReportResponse(
         // 정산 리포트 ID
         Long reportId,
 
-        // 리포트 상태. 발송 기능 전에는 항상 GENERATED
+        // 리포트 상태. 발송 확인 전 GENERATED, 후 SENT
         ReportStatus status,
 
         // 학생 이름
@@ -29,7 +29,11 @@ public record ReportResponse(
         Stats stats,
 
         // 교재별 진도 표 (표시 순서대로)
-        List<Progress> progress
+        List<Progress> progress,
+
+        // 이해도 수준 (상 3 · 중 2 · 하 1점 가중평균: 2.5 이상 HIGH, 1.5 이상 MEDIUM, 그 아래 LOW).
+        // 이해도 기록이 없으면 null. 같은 이름의 응답 레코드(Understanding)와 겹쳐 enum은 전체 이름으로 쓴다.
+        com.sudam.domain.record.enums.Understanding understandingLevel
 ) {
 
     public record Period(LocalDate startDate, LocalDate endDate) {
@@ -103,7 +107,8 @@ public record ReportResponse(
                 progress.stream()
                         .map(row -> new Progress(row.getTextbookName(), row.getStartLabel(), row.getEndLabel(),
                                 row.getTextbookStatus()))
-                        .toList()
+                        .toList(),
+                report.understandingLevel().orElse(null)
         );
     }
 }

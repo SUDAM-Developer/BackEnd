@@ -27,11 +27,13 @@ public class DemoSeedResetter {
     private static final String REPORT_IDS = "(select r.id from SettlementReport r where r.tutoring.id in :ids)";
     private static final String SESSION_IDS = "(select s.id from Session s where s.tutoring.id in :ids)";
 
-    // FK 역순 (자식 → 부모). 테이블이 늘면 여기에 추가한다 (예: settlement_report_views는 SettlementReport 앞).
+    // FK 역순 (자식 → 부모). 테이블이 늘면 여기에 추가한다.
     private static final List<String> STATEMENTS = List.of(
             "delete from InvoiceAmountAdjustment a where a.invoice.id in " + INVOICE_IDS,
             "delete from InvoicePayment p where p.invoice.id in " + INVOICE_IDS,
             "delete from Invoice i where i.tutoring.id in :ids",
+            // 열람은 리포트와 참여자를 둘 다 가리키므로 둘보다 먼저 지운다.
+            "delete from SettlementReportView v where v.report.id in " + REPORT_IDS,
             "delete from SettlementReportProgress p where p.report.id in " + REPORT_IDS,
             "delete from SettlementReport r where r.tutoring.id in :ids",
             "delete from SessionProgress p where p.session.id in " + SESSION_IDS,

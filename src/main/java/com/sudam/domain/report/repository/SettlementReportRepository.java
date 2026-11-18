@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface SettlementReportRepository extends JpaRepository<SettlementReport, Long> {
@@ -17,6 +18,16 @@ public interface SettlementReportRepository extends JpaRepository<SettlementRepo
     // 리포트와 과외를 함께 조회한다. 조회 API가 선생님 확인 · 학생 이름에 과외를 쓰므로 한 쿼리로 가져온다.
     @Query("select r from SettlementReport r join fetch r.tutoring where r.id = :reportId")
     Optional<SettlementReport> findWithTutoringById(@Param("reportId") Long reportId);
+
+    // 선생님의 삭제되지 않은 과외(종료 포함)에서 만든 리포트, 최근에 만든 순.
+    // 목록에 학생 이름(과외)과 정산 월의 기준 시각(사이클 시작)을 쓰므로 둘 다 함께 가져온다.
+    @Query("""
+            select r from SettlementReport r join fetch r.tutoring t join fetch r.cycle
+            where t.teacher.id = :teacherId
+              and t.deletedAt is null
+            order by r.id desc
+            """)
+    List<SettlementReport> findAllOfTeacher(@Param("teacherId") Long teacherId);
 
     // 코멘트 저장과 발송 확인이 동시에 들어와도 서로 덮어쓰지 않도록 리포트 행을 잠근다 (SELECT … FOR UPDATE).
     // 과외는 join fetch하지 않는다. 함께 잠그면 과외 행을 잠그는 정산 · 사이클 처리와 엉킬 수 있다.

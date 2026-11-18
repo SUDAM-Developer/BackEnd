@@ -1,17 +1,27 @@
 package com.sudam.domain.report.service;
 
+import com.sudam.domain.cycle.entity.Cycle;
+import com.sudam.domain.report.dto.response.ReportDeliveryListResponse;
 import com.sudam.domain.report.dto.response.ReportResponse;
 import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.exception.ReportException;
 import com.sudam.domain.report.exception.code.ReportErrorCode;
 import com.sudam.domain.report.repository.SettlementReportProgressRepository;
+import com.sudam.domain.report.repository.ReportFirstViewedAt;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.report.repository.SettlementReportViewRepository;
+import com.sudam.domain.session.repository.CycleFirstRecognizedDate;
 import com.sudam.domain.session.repository.SessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 정산 리포트 조회 서비스. 리포트를 만든 과외의 선생님만 볼 수 있다.
@@ -24,6 +34,44 @@ public class ReportService {
     private final SettlementReportRepository settlementReportRepository;
     private final SettlementReportProgressRepository settlementReportProgressRepository;
     private final SessionRepository sessionRepository;
+    private final SettlementReportViewRepository settlementReportViewRepository;
+
+    /***
+     * 함수 기능: 선생님의 정산 리포트 목록(발송 현황)을 최근에 만든 순으로 조회한다.
+     * @param teacherId 로그인한 선생님 (= users.id)
+     * @return 리포트 목록 응답. 리포트가 없으면 빈 목록
+     */
+    public ReportDeliveryListResponse listDeliveries(Long teacherId) {
+        List<SettlementReport> reports = settlementReportRepository.findAllOfTeacher(teacherId);
+        if (reports.isEmpty()) {
+            return new ReportDeliveryListResponse(List.of());
+        }
+
+        // 리포트마다 첫 인정 회차를 따로 조회하지 않도록 사이클 ID로 한 번에 모은다.
+        List<Long> cycleIds = reports.stream().map(report -> report.getCycle().getId()).toList();
+        Map<Long, LocalDate> firstDateByCycleId = sessionRepository.findFirstRecognizedDates(cycleIds).stream()
+                .collect(Collectors.toMap(CycleFirstRecognizedDate::cycleId, CycleFirstRecognizedDate::firstDate));
+
+        // 열람 시각도 리포트 ID로 한 번에 모은다. 기록이 없는 리포트는 null(안 읽음)이 된다.
+        List<Long> reportIds = reports.stream().map(SettlementReport::getId).toList();
+        Map<Long, LocalDateTime> viewedAtByReportId = settlementReportViewRepository.findFirstViewedAts(reportIds)
+                .stream()
+                .collect(Collectors.toMap(ReportFirstViewedAt::reportId, ReportFirstViewedAt::firstViewedAt));
+
+        return new ReportDeliveryListResponse(reports.stream()
+                .map(report -> ReportDeliveryListResponse.Item.of(report,
+                        settlementMonth(firstDateByCycleId.get(report.getCycle().getId()), report.getCycle()),
+                        viewedAtByReportId.get(report.getId())))
+                .toList());
+    }
+
+    // 정산 월: 사이클 인정 회차가 시작된 달. 사이클은 직전 정산 순간 열리므로 시작 시각은 앞 달 말일일 수 있어
+    // 첫 인정 회차를 우선하고, 인정 회차가 없을 때만 사이클 시작월로 대신한다.
+    private static YearMonth settlementMonth(LocalDate firstRecognizedDate, Cycle cycle) {
+        return firstRecognizedDate != null
+                ? YearMonth.from(firstRecognizedDate)
+                : YearMonth.from(cycle.getStartedAt());
+    }
 
     /***
      * 함수 기능: 정산 리포트의 요약 · 진도를 조회한다.
