@@ -12,7 +12,9 @@ import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
+import com.sudam.domain.report.entity.SettlementReport;
 import com.sudam.domain.report.repository.SettlementReportRepository;
+import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.settlement.port.SettlementReportCreator;
 import com.sudam.domain.tutoring.entity.Textbook;
 import com.sudam.domain.tutoring.entity.Tutoring;
@@ -99,6 +101,7 @@ public class DemoSeedService {
     private final SessionProgressRepository sessionProgressRepository;
     private final SettlementReportCreator settlementReportCreator;
     private final SettlementReportRepository settlementReportRepository;
+    private final SettlementReportViewRepository settlementReportViewRepository;
     private final DemoSeedResetter demoSeedResetter;
     private final Clock clock;
 
@@ -182,9 +185,10 @@ public class DemoSeedService {
         Cycle second = cycleRepository.save(Cycle.open(base.tutoring(), 2, settledAt));
 
         Long reportId = settlementReportCreator.create(base.tutoring().getId(), first.getId());
-        settlementReportRepository.findById(reportId)
-                .orElseThrow(() -> new IllegalStateException("방금 만든 리포트가 없습니다. reportId=" + reportId))
-                .draftComment(card.aiDraftComment());
+        SettlementReport report = settlementReportRepository.findById(reportId)
+                .orElseThrow(() -> new IllegalStateException("방금 만든 리포트가 없습니다. reportId=" + reportId));
+        report.draftComment(card.aiDraftComment());
+        card.deliverReport(report, base.parent(), settledAt).ifPresent(settlementReportViewRepository::save);
         invoiceRepository.save(card.issueInvoice(base.policy(), second.getId(), reportId, cycleStartDate,
                 base.parent(), now));
     }
