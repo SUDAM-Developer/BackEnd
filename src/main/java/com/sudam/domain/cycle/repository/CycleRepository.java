@@ -4,6 +4,7 @@ import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,4 +20,7 @@ public interface CycleRepository extends JpaRepository<Cycle, Long> {
     Optional<Cycle> findByTutoringIdAndCycleNo(Long tutoringId, Integer cycleNo);
 
     List<Cycle> findAllByTutoringIdOrderByCycleNo(Long tutoringId);
+
+    // 여러 과외의 사이클을 한 번에 (예정 회차 사이클 예측). 읽기 전용이라 과외 행 잠금이 필요 없다.
+    List<Cycle> findAllByTutoringIdIn(Collection<Long> tutoringIds);
 }

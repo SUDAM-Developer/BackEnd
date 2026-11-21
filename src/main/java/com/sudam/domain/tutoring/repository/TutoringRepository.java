@@ -1,12 +1,14 @@
 package com.sudam.domain.tutoring.repository;
 
 import com.sudam.domain.tutoring.entity.Tutoring;
+import com.sudam.domain.tutoring.enums.TutoringStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface TutoringRepository extends JpaRepository<Tutoring, Long> {
@@ -20,4 +22,7 @@ public interface TutoringRepository extends JpaRepository<Tutoring, Long> {
 
     // 선생님에게 과외가 하나라도 있는지 (삭제 · 종료 포함). 시연용 가상 데이터 실행기가 이미 만들었는지 판단할 때 쓴다.
     boolean existsByTeacherId(Long teacherId);
+
+    // 선생님의 과외 중 상태가 같고 삭제되지 않은 것 (tutoringId 오름차순). 수업 중 과외는 status = ACTIVE로 부른다.
+    List<Tutoring> findAllByTeacherIdAndStatusAndDeletedAtIsNullOrderById(Long teacherId, TutoringStatus status);
 }
