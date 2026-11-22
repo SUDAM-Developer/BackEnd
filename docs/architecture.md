@@ -38,8 +38,10 @@ com.sudam
 │   ├── session                         # 수업 회차
 │   │   ├── entity/Session.java         # completeRegular = 정규 회차 기록
 │   │   ├── enums                       # SessionType, SessionStatus
-│   │   ├── repository                  # 일정 · 날짜 중복 확인, 사이클 인정 회차의 정렬 조회 · 수 · 첫/마지막 날짜, 날짜 범위 휴강
-│   │   └── service/SessionCycleReader  # 정산 포트 CycleSessionReader 구현 (MANDATORY)
+│   │   ├── repository                  # 일정 · 날짜 중복 확인, 사이클 인정 회차의 정렬 조회 · 수 · 첫/마지막 날짜, 날짜 범위 휴강, 계산기용 기간 · 인정 회차 · 정산 날짜 조회
+│   │   └── service
+│   │       ├── SessionCycleReader      # 정산 포트 CycleSessionReader 구현 (MANDATORY)
+│   │       └── LessonCalendar          # 공통 예정 회차 계산기 (LessonExpander 펼치기 · CycleTimeline 사이클 예측, 결과는 LessonSlot)
 │   ├── record                          # 수업 기록 · 회차 진도
 │   │   ├── controller / service        # POST /api/v1/tutorings/{tutoringId}/records
 │   │   ├── entity                      # SessionRecord, SessionProgress (둘 다 회차를 가리킴)

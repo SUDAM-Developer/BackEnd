@@ -446,6 +446,17 @@ erDiagram
 
 예정 회차 계산: 적용 기간 안에서 요일이 맞는 날짜를 만들고, 같은 (schedule_id, original_date)의 sessions 행이 있는 날짜는 그 행으로 바꿔요. 일정 탭(5.1.1), 수업 카드(3.1.1), 미기록(4.3.3), 기록 알림(3.1.2), 보강 후보 검사(5.2.2), 시간 바꾸기 검사(5.2.4), 캘린더 구독 피드(5.1.2 · 9.2.3)가 모두 이 계산기 하나를 써요.
 
+#### 예정 회차 계산기 구현 메모 (팀 결정, 위 설명보다 우선)
+
+계산기: `com.sudam.domain.session.service.LessonCalendar`. 규칙은 순수 함수 `LessonExpander`(펼치기)와 `CycleTimeline`(사이클 번호 · 예측)에 있어요. 담당: 정홍준.
+
+- 공개 메서드: `lessonsOf(과외들, from, to)` · `teacherLessons(teacherId, from, to)`(ACTIVE · 미삭제 과외) · `findTeacherLessonsOn(teacherId, date)` → `LessonSlot` 목록, `findLesson(과외, LessonRef)` → 회차 하나(sessionId 또는 scheduleId + originalDate), `timelines(과외들, until)` → 과외별 `CycleTimeline`. 겹침 검사는 `LessonSlot.overlaps(start, end)`(끝과 시작이 맞닿으면 겹치지 않음).
+- 펼치기: 일정 적용 기간 · 과외 생성일 ~ 종료일(포함) 안에서 요일로 만들어요. 마지막 정산 사이클의 마지막 인정 날짜까지는 계산 회차를 만들지 않아요(저장 행은 그대로 나와요). `findLesson`은 이 정산 잠금을 보지 않아서, 기록 · 휴강 API가 '일정에 없는 날짜'와 '이미 정산된 날짜'를 따로 검사해요.
+- 덮어쓰기: 저장 행은 session_date 또는 original_date가 기간 안인 것을 읽어요. [그 수업으로]처럼 날짜를 옮긴 기록은 원래 날짜의 예정 회차를 지우고 기록 날짜에 나와요. 정규 기록 행은 시각을 저장하지 않으므로 반복 일정 시각으로 채워요.
+- 정렬: session_date → start_time(NULL 뒤) → 저장 회차 id → 일정 id (계산 회차는 id가 없어 저장 회차 뒤).
+- 사이클 번호: 인정 회차는 소속 사이클 안 정렬 순서, 미인정 휴강은 날짜로 소속만(번호 없음), 오늘 이후 SCHEDULED(계산 + 저장된 보강 · 시간 변경)는 규칙 7로 예측해요. **지난 미기록 회차는 '지금 기록하면 될 번호'(진행 중 인정 수 + 1)이고 예측 순번은 차지하지 않아요.** `startsNewCycle`은 진행 중 사이클 다음 사이클의 첫 예측 회차에만 true예요.
+- `timeChanged`는 `sessions.time_changed_at` 컬럼이 생기기 전까지 항상 false예요 (휴강 · 시간 변경 작업에서 채움).
+
 | 상황 | sessions에 생기는 행 |
 | --- | --- |
 | 반복 일정 수업을 기록 | schedule_id + original_date, status = COMPLETED |
