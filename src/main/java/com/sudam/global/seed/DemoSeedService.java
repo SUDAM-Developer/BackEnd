@@ -103,6 +103,7 @@ public class DemoSeedService {
     private final SettlementReportRepository settlementReportRepository;
     private final SettlementReportViewRepository settlementReportViewRepository;
     private final DemoSeedResetter demoSeedResetter;
+    private final DemoTutoringBackdater demoTutoringBackdater;
     private final Clock clock;
 
     private final SecureRandom secureRandom = new SecureRandom();
@@ -235,6 +236,8 @@ public class DemoSeedService {
                 .gradeLevel(gradeLevel)
                 .gradeSchoolYear(DemoLessonPlan.schoolYear(now.toLocalDate()))
                 .build());
+        // 일정 시작일보다 늦게 만든 과외는 실제로 생길 수 없어서 생성 시각을 일정 시작일로 당긴다.
+        demoTutoringBackdater.backdate(tutoring, effectiveFrom.atStartOfDay());
 
         Map<DayOfWeek, TutoringSchedule> schedules = new EnumMap<>(DayOfWeek.class);
         for (DayOfWeek day : lessonDays) {
