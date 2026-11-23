@@ -264,7 +264,7 @@ class RecordServiceTest {
     }
 
     private static Tutoring tutoringOf(TeacherProfile teacher) {
-        return Tutoring.builder().teacher(teacher).subject(Subject.MATH)
+        return Tutoring.builder().teacher(teacher).subjects(List.of(Subject.MATH))
                 .studentName("김민준").gradeLevel(8).gradeSchoolYear(2026).build();
     }
 

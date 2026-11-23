@@ -49,7 +49,7 @@ class DemoIncomeCardTest {
         List<InvoiceItemResponse> items = DemoIncomeCard.ALL.stream()
                 .map(card -> {
                     Tutoring tutoring = Tutoring.builder()
-                            .teacher(teacher).subject(Subject.ENGLISH).studentName(card.studentName())
+                            .teacher(teacher).subjects(List.of(Subject.ENGLISH)).studentName(card.studentName())
                             .gradeLevel(card.gradeLevel()).gradeSchoolYear(2026).build();
                     TutoringPolicy policy = TutoringPolicy.builder()
                             .tutoring(tutoring).effectiveCycleNo(1)

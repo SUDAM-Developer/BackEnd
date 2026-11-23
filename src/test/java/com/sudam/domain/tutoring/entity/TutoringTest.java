@@ -62,10 +62,47 @@ class TutoringTest {
         assertThat(tutoring.getTeacher()).isSameAs(TEACHER);
     }
 
+    @Test
+    @DisplayName("과목 표시 이름은 선택 순서와 관계없이 과목 순서대로 ' · '로 잇는다")
+    void 과목_표시_이름은_과목_순서대로_잇는다() {
+        // given
+        Tutoring tutoring = tutoring(List.of(Subject.MATH, Subject.ENGLISH), null);
+
+        // when
+        String names = tutoring.subjectNames();
+
+        // then
+        assertThat(names).isEqualTo("영어 · 수학");
+    }
+
+    @Test
+    @DisplayName("기타 과목은 직접 입력한 과목명으로 표시한다")
+    void 기타_과목은_직접_입력한_이름으로_표시한다() {
+        // given
+        Tutoring tutoring = tutoring(List.of(Subject.OTHER, Subject.ENGLISH), "논술");
+
+        // when
+        String names = tutoring.subjectNames();
+
+        // then
+        assertThat(names).isEqualTo("영어 · 논술");
+    }
+
+    private static Tutoring tutoring(List<Subject> subjects, String subjectOther) {
+        return Tutoring.builder()
+                .teacher(TEACHER)
+                .subjects(subjects)
+                .subjectOther(subjectOther)
+                .studentName("김민준")
+                .gradeLevel(8)
+                .gradeSchoolYear(2026)
+                .build();
+    }
+
     private static Tutoring tutoring() {
         return Tutoring.builder()
                 .teacher(TEACHER)
-                .subject(Subject.MATH)
+                .subjects(List.of(Subject.MATH))
                 .studentName("김민준")
                 .gradeLevel(8)
                 .gradeSchoolYear(2026)

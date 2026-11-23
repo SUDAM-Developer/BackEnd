@@ -51,7 +51,7 @@ class InvoiceAmountCalculatorTest {
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null);
         Tutoring tutoring = Tutoring.builder()
                 .teacher(teacher)
-                .subject(Subject.ENGLISH)
+                .subjects(List.of(Subject.ENGLISH))
                 .gradeLevel(9)
                 .gradeSchoolYear(2026)
                 .build();

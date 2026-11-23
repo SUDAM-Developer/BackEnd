@@ -24,6 +24,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.EnumSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 과외 1개 = 학생 1명.
@@ -47,12 +51,12 @@ public class Tutoring extends BaseTimeEntity {
     @JoinColumn(name = "teacher_id", nullable = false)
     private TeacherProfile teacher;
 
-    // 과목 코드. 프로필과 같은 Subject enum을 쓰고 테이블 없이 enum 이름으로 저장한다 (ERD 공통 규칙).
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private Subject subject;
+    // 과목 복수 선택(1개 이상). 프로필과 같은 Subject enum을 별도 테이블 없이 JSON 배열(["ENGLISH","MATH"])로 저장한다.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(nullable = false)
+    private Set<Subject> subjects;
 
-    // 과목 '기타' 직접 입력 1~10자. subject = OTHER일 때만 값이 있다 (앱 검증).
+    // 과목 '기타' 직접 입력 1~10자. subjects에 OTHER가 있을 때만 값이 있다 (앱 검증).
     @Column(length = 10)
     private String subjectOther;
 
@@ -84,10 +88,10 @@ public class Tutoring extends BaseTimeEntity {
     private LocalDateTime deletedAt;
 
     @Builder
-    private Tutoring(TeacherProfile teacher, Subject subject, String subjectOther, String studentName,
+    private Tutoring(TeacherProfile teacher, Collection<Subject> subjects, String subjectOther, String studentName,
                      Integer gradeLevel, String gradeOther, Integer gradeSchoolYear) {
         this.teacher = teacher;
-        this.subject = subject;
+        this.subjects = EnumSet.copyOf(subjects);
         this.subjectOther = subjectOther;
         this.studentName = studentName;
         this.gradeLevel = gradeLevel;
@@ -112,6 +116,17 @@ public class Tutoring extends BaseTimeEntity {
     public void delete(LocalDateTime deletedAt) {
         this.deletedAt = deletedAt;
         this.studentName = null;
+    }
+
+    /***
+     * 함수 기능: 화면에 보여줄 과목 이름을 과목 순서대로 ' · '로 잇는다 (예: '영어 · 수학').
+     * @return OTHER는 직접 입력한 과목명으로 바꾼 표시 이름
+     */
+    public String subjectNames() {
+        // JSON에서 읽으면 Set 구현과 순서가 보장되지 않아 enum 순서로 다시 정렬한다.
+        return EnumSet.copyOf(subjects).stream()
+                .map(subject -> subject == Subject.OTHER && subjectOther != null ? subjectOther : subject.getName())
+                .collect(Collectors.joining(" · "));
     }
 
     public boolean isDeleted() {

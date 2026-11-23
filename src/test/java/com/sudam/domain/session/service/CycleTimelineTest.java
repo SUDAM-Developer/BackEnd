@@ -40,7 +40,7 @@ class CycleTimelineTest {
 
     @BeforeEach
     void setUp() {
-        tutoring = withId(Tutoring.builder().subject(Subject.ENGLISH).studentName("윤서아")
+        tutoring = withId(Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("윤서아")
                 .gradeLevel(10).gradeSchoolYear(2026).build(), TUTORING_ID);
         Cycle settled = withId(Cycle.open(tutoring, 1, LocalDateTime.of(2026, 10, 1, 9, 0)), SETTLED_CYCLE_ID);
         settled.settle(LocalDateTime.of(2026, 10, 14, 20, 0));

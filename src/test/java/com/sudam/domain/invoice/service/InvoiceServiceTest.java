@@ -565,7 +565,7 @@ class InvoiceServiceTest {
     private static Tutoring tutoring(Long id, Long teacherId) {
         Tutoring tutoring = Tutoring.builder()
                 .teacher(teacher(teacherId))
-                .subject(Subject.MATH)
+                .subjects(List.of(Subject.MATH))
                 .studentName("서아")
                 .gradeLevel(10)
                 .gradeSchoolYear(2026)

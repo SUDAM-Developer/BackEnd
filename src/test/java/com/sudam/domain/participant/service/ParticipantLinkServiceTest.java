@@ -18,6 +18,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +43,7 @@ class ParticipantLinkServiceTest {
     void setUp() {
         participantLinkService = new ParticipantLinkService(participantRepository,
                 Clock.fixed(NOW.atZone(SEOUL).toInstant(), SEOUL));
-        tutoring = Tutoring.builder().subject(Subject.ENGLISH).studentName("윤서아")
+        tutoring = Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("윤서아")
                 .gradeLevel(9).gradeSchoolYear(2026).build();
     }
 
