@@ -157,7 +157,7 @@ PUT  /api/v1/users/me/profile           없으면 USER404_2. 전체 교체 후 f
 GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서 · 결제 · 알림은 고정 기본값
 ```
 
-과목은 `Subject` enum이고 `teacher_profiles.subjects`는 enum 이름 배열 JSON 컬럼이다. `OTHER`일 때만 `subject_other`를 쓴다.
+과목은 `Subject` enum이고 `teacher_profiles.subjects` · `tutorings.subjects`는 enum 이름 배열 JSON 컬럼이다. `OTHER`일 때만 각 테이블의 `subject_other`를 쓴다.
 
 ## 설정 / 실행 전제
 
