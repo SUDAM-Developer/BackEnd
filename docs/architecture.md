@@ -42,6 +42,11 @@ com.sudam
 │   │   └── service
 │   │       ├── SessionCycleReader      # 정산 포트 CycleSessionReader 구현 (MANDATORY)
 │   │       └── LessonCalendar          # 공통 예정 회차 계산기 (LessonExpander 펼치기 · CycleTimeline 사이클 예측, 결과는 LessonSlot)
+│   ├── schedule                        # 일정 탭 조회 (계산기 위의 얇은 조회, 엔티티 없음)
+│   │   ├── controller / service        # GET /api/v1/schedules/monthly · daily (ScheduleService)
+│   │   ├── enums                       # LessonAction (RECORD · ADJUST · NONE)
+│   │   ├── dto/response                # MonthlyScheduleResponse, DailyScheduleResponse
+│   │   └── exception                   # ScheduleException, code/ScheduleErrorCode · ScheduleSuccessCode
 │   ├── record                          # 수업 기록 · 회차 진도
 │   │   ├── controller / service        # POST /api/v1/tutorings/{tutoringId}/records
 │   │   ├── entity                      # SessionRecord, SessionProgress (둘 다 회차를 가리킴)
