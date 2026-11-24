@@ -17,6 +17,7 @@ import com.sudam.domain.report.repository.SettlementReportViewRepository;
 import com.sudam.domain.session.entity.Session;
 import com.sudam.domain.session.repository.SessionRepository;
 import com.sudam.domain.settlement.port.SettlementReportCreator;
+import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.repository.TextbookRepository;
 import com.sudam.domain.tutoring.repository.TutoringPolicyRepository;
 import com.sudam.domain.tutoring.repository.TutoringRepository;
@@ -45,6 +46,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -92,6 +94,7 @@ class DemoSeedServiceTest {
     @Mock private SettlementReportRepository settlementReportRepository;
     @Mock private SettlementReportViewRepository settlementReportViewRepository;
     @Mock private DemoSeedResetter demoSeedResetter;
+    @Mock private DemoTutoringBackdater demoTutoringBackdater;
     @Mock private Clock clock;
 
     @InjectMocks
@@ -120,7 +123,7 @@ class DemoSeedServiceTest {
                 tutoringScheduleRepository, textbookRepository, tutoringPolicyRepository, tutoringSettingRepository,
                 participantRepository, cycleRepository, invoiceRepository, sessionRepository,
                 sessionRecordRepository, sessionProgressRepository, settlementReportCreator, settlementReportRepository,
-                settlementReportViewRepository, demoSeedResetter);
+                settlementReportViewRepository, demoSeedResetter, demoTutoringBackdater);
     }
 
     @Test
@@ -252,6 +255,32 @@ class DemoSeedServiceTest {
                 assertThat(card.lessonDays()).contains(session.getOriginalDate().getDayOfWeek());
             });
         }
+    }
+
+    @Test
+    @DisplayName("과외마다 생성 시각을 일정 시작일로 당긴다 (수입 카드는 사이클 시작일, 김서아는 첫 기록 날짜)")
+    void 과외_생성_시각을_일정_시작일로_당긴다() {
+        // given
+        SeedCapture capture = seedAll();
+        ArgumentCaptor<Tutoring> tutorings = ArgumentCaptor.forClass(Tutoring.class);
+        ArgumentCaptor<LocalDateTime> createdAts = ArgumentCaptor.forClass(LocalDateTime.class);
+
+        // when
+        verify(demoTutoringBackdater, times(STUDENTS.size() + 1)).backdate(tutorings.capture(), createdAts.capture());
+
+        // then
+        Map<String, LocalDateTime> createdAtByStudent = new HashMap<>();
+        for (int i = 0; i < tutorings.getAllValues().size(); i++) {
+            createdAtByStudent.put(tutorings.getAllValues().get(i).getStudentName(), createdAts.getAllValues().get(i));
+        }
+        STUDENTS.forEach(student ->
+                assertThat(createdAtByStudent).containsEntry(student, INCOME_CYCLE_START.atStartOfDay()));
+        LocalDate demoFirstDate = capture.sessions().stream()
+                .filter(session -> session.getTutoring().getStudentName().equals(DemoLessonPlan.STUDENT_NAME))
+                .map(Session::getOriginalDate)
+                .min(Comparator.naturalOrder())
+                .orElseThrow();
+        assertThat(createdAtByStudent).containsEntry(DemoLessonPlan.STUDENT_NAME, demoFirstDate.atStartOfDay());
     }
 
     /***

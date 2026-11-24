@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-18 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
+> 최종 수정: 2026-11-23 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
 
 ## 공통
 
@@ -29,6 +29,8 @@
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
+| `SCHEDULE200_1` | 200 | 한 달 달력이 성공적으로 조회되었습니다. |
+| `SCHEDULE200_2` | 200 | 그날 일정이 성공적으로 조회되었습니다. |
 | `REPORT200_1` | 200 | 정산 리포트를 조회했습니다. |
 | `REPORT200_2` | 200 | 정산 리포트 코멘트를 조회했습니다. |
 | `REPORT200_3` | 200 | 정산 리포트 코멘트를 저장하고 확인했습니다. |
@@ -70,6 +72,7 @@
 | `RECORD404_3` | 404 | 교재를 찾을 수 없습니다. |
 | `RECORD409_1` | 409 | 이미 기록한 수업입니다. |
 | `RECORD409_2` | 409 | 진행 중인 수업 사이클이 없습니다. |
+| `SCHEDULE404_1` | 404 | 확인할 수 없는 과외입니다. |
 | `SETTLEMENT500_1` | 500 | 정산에 적용할 과외 정책을 찾을 수 없습니다. |
 | `REPORT404_1` | 404 | 정산 리포트를 찾을 수 없습니다. |
 | `REPORT409_1` | 409 | 이미 보낸 정산 리포트는 고칠 수 없습니다. |
@@ -229,6 +232,64 @@
 | 정산할 정책 없음 (데이터 이상) | 500 | `SETTLEMENT500_1` |
 
 동시 요청은 고려하지 않는다. 같은 회차를 동시에 저장하면 늦은 요청은 유니크 제약으로 `COMMON500`.
+
+---
+
+## 일정
+
+일정 탭(5.1.1). 회차는 모두 공통 예정 회차 계산기(`LessonCalendar`)로 만든다 — 반복 일정을 펼치고 저장된 회차(기록 · 휴강 · 보강)로 덮어쓴다. 대상은 내 과외 중 수업 중(`ACTIVE`) · 삭제 안 됨. 과외 수와 상관없이 쿼리 수가 일정하다(monthly 4 · daily 10, `ScheduleServiceIntegrationTest`).
+
+### 한 달 달력 — `GET /api/v1/schedules/monthly?yearMonth=YYYY-MM` (`200`, `SCHEDULE200_1`)
+
+```json
+{
+  "yearMonth": "2026-11",
+  "today": "2026-11-11",
+  "students": [ { "tutoringId": 31, "studentName": "김서아" }, { "tutoringId": 35, "studentName": "이도윤" } ],
+  "days": [
+    { "date": "2026-11-11", "lessons": [ { "tutoringId": 31, "canceled": true, "makeup": false }, { "tutoringId": 35, "canceled": false, "makeup": false } ], "lessonCount": 2, "eventCategories": [] }
+  ]
+}
+```
+
+- `students`: 범례, tutoringId 오름차순(프론트가 이 순서로 색을 정함). `days`: 수업이 있는 날만 날짜순, `lessons`는 시작 시각순.
+- `eventCategories`: 선생님 일정(`teacher_events`, PR-9) 전까지 항상 `[]`.
+
+### 그날 일정 · 수업 — `GET /api/v1/schedules/daily?date=YYYY-MM-DD&tutoringId=` (`200`, `SCHEDULE200_2`)
+
+`date` 없으면 오늘, `tutoringId` 있으면 그 과외만.
+
+```json
+{
+  "date": "2026-11-11",
+  "isToday": true,
+  "events": [],
+  "sessions": [
+    {
+      "sessionId": null, "scheduleId": 9, "originalDate": "2026-11-11",
+      "date": "2026-11-11", "startTime": "20:30", "endTime": "22:00",
+      "tutoringId": 35, "studentName": "이도윤", "subjectName": "영어 · 수학",
+      "sessionType": "REGULAR", "status": "SCHEDULED", "cancelReason": null,
+      "hasRecord": false, "timeChanged": false, "pendingTimeChange": false, "makeup": null,
+      "cycle": { "cycleNo": 1, "noInCycle": 3, "recognizedCount": 2, "settlementSessionCount": 4, "startsNewCycle": false, "isPredicted": true },
+      "action": "RECORD"
+    }
+  ],
+  "upcoming": []
+}
+```
+
+- `sessions`: 그날 수업, 시작 시각순. 저장 전 회차는 `sessionId: null`이고 (`scheduleId`, `originalDate`)로 기록 · 휴강 API에 보낸다.
+- `upcoming`: 오늘일 때만 지금 시각 이후 수업 최대 3건(8주 안, 휴강 포함). 오늘이 아니면 `[]`.
+- `subjectName`: 과목 순서대로 ` · `로 이음, 기타는 직접 입력한 과목명.
+- `cycle`: 기록한 인정 회차는 확정 번호, 지난 미기록은 '지금 기록하면 될 번호'(인정 수 + 1), 앞으로의 예정은 남은 회차를 넘으면 다음 사이클(`startsNewCycle`), 미인정 휴강은 `noInCycle: null`.
+- `action`: 기록됨 · 휴강 · 보강 = `NONE`, 오늘 · 지난 미기록 정규 = `RECORD`, 앞으로의 정규 예정 = `ADJUST`. 정산이 끝난 날짜의 미기록 회차는 만들지 않는다.
+- 아직 고정값: `events` = `[]`(PR-9), `cancelReason` = `null`(휴강 사유 컬럼 전), `pendingTimeChange` = `false`(시간 변경 전), `makeup` = `null`(보강 전), `timeChanged` = `false`(시간 변경 컬럼 전).
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| `yearMonth` · `date` · `tutoringId` 형식 오류 (`result`에 파라미터 메시지) / `yearMonth` 누락 (`result: null`) | 400 | `COMMON400` |
+| `tutoringId`가 내 수업 중 과외가 아님 (Notion `TUTORING404_1`) | 404 | `SCHEDULE404_1` |
 
 ---
 
