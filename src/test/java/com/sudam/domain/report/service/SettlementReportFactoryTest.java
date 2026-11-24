@@ -72,7 +72,7 @@ class SettlementReportFactoryTest {
 
     @BeforeEach
     void setUp() {
-        tutoring = withId(Tutoring.builder().subject(Subject.ENGLISH).studentName("윤서아")
+        tutoring = withId(Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("윤서아")
                 .gradeLevel(11).gradeSchoolYear(2026).build(), TUTORING_ID);
         cycle = withId(Cycle.open(tutoring, 2, LocalDateTime.of(2026, 9, 1, 0, 0)), CYCLE_ID);
         grammar = withId(Textbook.builder().tutoring(tutoring).name("Grammar Zone 기본")

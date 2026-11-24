@@ -77,7 +77,7 @@ class ReportServiceTest {
         TeacherProfile teacher = withId(TeacherProfile.create(
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"),
                 "한서윤", List.of(Subject.ENGLISH), null), TEACHER_ID);
-        Tutoring tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
+        Tutoring tutoring = withId(Tutoring.builder().teacher(teacher).subjects(List.of(Subject.ENGLISH))
                 .studentName("윤서아").gradeLevel(11).gradeSchoolYear(2026).build(), 10L);
         Cycle cycle = withId(Cycle.open(tutoring, 1, LocalDateTime.of(2026, 9, 1, 0, 0)), CYCLE_ID);
         report = withId(SettlementReport.builder().tutoring(tutoring).cycle(cycle)

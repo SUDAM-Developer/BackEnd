@@ -81,7 +81,7 @@ class ShareServiceTest {
         TeacherProfile teacher = withId(TeacherProfile.create(
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"),
                 "한서윤", List.of(Subject.ENGLISH), null), TEACHER_ID);
-        tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
+        tutoring = withId(Tutoring.builder().teacher(teacher).subjects(List.of(Subject.ENGLISH))
                 .studentName("윤서아").gradeLevel(9).gradeSchoolYear(2026).build(), 10L);
         parent = withId(Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000002"), PARENT_ID);
         parent.issueLinkToken(TOKEN, NOW.minusDays(30));
@@ -234,7 +234,7 @@ class ShareServiceTest {
         @DisplayName("다른 과외의 참여자면 SHARE404_1")
         void 다른_과외_참여자() {
             // given
-            Tutoring other = withId(Tutoring.builder().subject(Subject.ENGLISH).studentName("박지후")
+            Tutoring other = withId(Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("박지후")
                     .gradeLevel(8).gradeSchoolYear(2026).build(), 11L);
             Participant otherParent = withId(Participant.createParent(other, ParticipantLabel.MOTHER, "01000000001"),
                     PARENT_ID);

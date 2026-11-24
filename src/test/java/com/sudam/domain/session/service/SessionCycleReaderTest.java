@@ -46,7 +46,7 @@ class SessionCycleReaderTest {
 
     @BeforeEach
     void setUp() {
-        tutoring = Tutoring.builder().subject(Subject.MATH).studentName("김민준")
+        tutoring = Tutoring.builder().subjects(List.of(Subject.MATH)).studentName("김민준")
                 .gradeLevel(8).gradeSchoolYear(2026).build();
     }
 

@@ -78,7 +78,7 @@ class ParentReportServiceTest {
         TeacherProfile teacher = withId(TeacherProfile.create(
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"), "한서윤", List.of(Subject.ENGLISH), null),
                 TEACHER_ID);
-        tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
+        tutoring = withId(Tutoring.builder().teacher(teacher).subjects(List.of(Subject.ENGLISH))
                 .studentName("윤서아").gradeLevel(9).gradeSchoolYear(2026).build(), 10L);
         parent = withId(Participant.createParent(tutoring, ParticipantLabel.MOTHER, "01000000002"), PARENT_ID);
         report = withId(SettlementReport.builder().tutoring(tutoring)
@@ -150,7 +150,7 @@ class ParentReportServiceTest {
     @DisplayName("링크의 과외가 아닌 리포트면 REPORT404_1")
     void 다른_과외_리포트() {
         // given
-        Tutoring other = withId(Tutoring.builder().subject(Subject.ENGLISH).studentName("박지후")
+        Tutoring other = withId(Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("박지후")
                 .gradeLevel(8).gradeSchoolYear(2026).build(), 11L);
         Participant otherParent = withId(Participant.createParent(other, ParticipantLabel.MOTHER, "01000000001"), 30L);
         report.reviewComment("코멘트", NOW);

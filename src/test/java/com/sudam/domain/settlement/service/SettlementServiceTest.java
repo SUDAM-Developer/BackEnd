@@ -94,7 +94,7 @@ class SettlementServiceTest {
 
         tutoring = Tutoring.builder()
                 .teacher(TEACHER)
-                .subject(Subject.ENGLISH)
+                .subjects(List.of(Subject.ENGLISH))
                 .studentName("김서아")
                 .gradeLevel(9)
                 .gradeSchoolYear(2026)
@@ -235,7 +235,7 @@ class SettlementServiceTest {
         // given
         Tutoring deleted = Tutoring.builder()
                 .teacher(TEACHER)
-                .subject(Subject.ENGLISH)
+                .subjects(List.of(Subject.ENGLISH))
                 .gradeLevel(9)
                 .gradeSchoolYear(2026)
                 .build();

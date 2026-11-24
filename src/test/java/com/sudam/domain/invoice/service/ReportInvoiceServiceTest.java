@@ -280,7 +280,7 @@ class ReportInvoiceServiceTest {
     private static Tutoring tutoring(Long teacherId) {
         Tutoring tutoring = Tutoring.builder()
                 .teacher(teacher(teacherId))
-                .subject(Subject.ENGLISH)
+                .subjects(List.of(Subject.ENGLISH))
                 .studentName("서아")
                 .gradeLevel(10)
                 .gradeSchoolYear(2026)

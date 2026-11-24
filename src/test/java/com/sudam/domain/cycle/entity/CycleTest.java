@@ -87,7 +87,7 @@ class CycleTest {
     private static Tutoring tutoring() {
         return Tutoring.builder()
                 .teacher(TEACHER)
-                .subject(Subject.MATH)
+                .subjects(List.of(Subject.MATH))
                 .studentName("김민준")
                 .gradeLevel(8)
                 .gradeSchoolYear(2026)

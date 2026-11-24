@@ -330,8 +330,8 @@ erDiagram
 | --- | --- | --- | --- |
 | `id` | BIGINT UNSIGNED | PK |  |
 | `teacher_id` | BIGINT UNSIGNED | FK → teacher_profiles |  |
-| `subject` | VARCHAR(20) | NOT NULL | 과목 코드 (ENGLISH … OTHER) |
-| `subject_other` | VARCHAR(10) | NULL | 과목 ‘기타’ 1~10자. subject = OTHER일 때만 |
+| `subjects` | JSON | NOT NULL | 과목 복수 선택 (T-05). 과목 코드 배열 `["ENGLISH","MATH"]`, 1개 이상 |
+| `subject_other` | VARCHAR(10) | NULL | 과목 ‘기타’ 1~10자. subjects에 OTHER가 있을 때만 |
 | `student_name` | VARCHAR(10) | NULL | 1~10자. 삭제 시 NULL |
 | `grade_level` | TINYINT UNSIGNED | NOT NULL | 1~12 = 초1~고3 (화면 선택지는 초6~고3), 0 = 기타. 현재 학년 = grade_level + (올해 학년도 − grade_school_year), 12에서 멈춤. 1~8이면 자녀 동의 필요, 0(기타)은 필요 없음 |
 | `grade_other` | VARCHAR(10) | NULL | 학년 ‘기타’ 직접 입력 (예: 재수생, 성인) |
@@ -340,9 +340,9 @@ erDiagram
 | `ended_at` | DATETIME | NULL | 수업 종료 (7.1.2) |
 | `created_at / updated_at` | DATETIME | NOT NULL |  |
 | `deleted_at` | DATETIME | NULL | 논리 삭제 |
-- 제약: INDEX(teacher_id, status). 앱 검증: subject = OTHER일 때만 subject_other 필수, grade_level = 0이면 grade_other 필수.
+- 제약: INDEX(teacher_id, status). 앱 검증: subjects에 OTHER가 있을 때만 subject_other 필수, grade_level = 0이면 grade_other 필수.
 - 구독 판단(1.2.2): ‘수업 중’ 과외 수 = status = ACTIVE이고 deleted_at IS NULL인 행 수. 1개 이상인데 구독이 ‘이용 중’ 또는 ‘입금 대기(유예)’가 아니면 새 과외를 만들 수 없어요. 구독이 만료돼도 기존 과외의 기록 · 정산 · 학부모 링크는 그대로예요.
-- 구현 메모 (팀 결정, 위 표보다 우선): `teacher_id`는 `TeacherProfile` 연관관계(`@ManyToOne(LAZY)`)예요. `teacher_profiles`의 PK가 `users.id`라 값은 그대로 `users.id`예요. 과목은 표대로 `subject` 컬럼에 `Subject` enum 이름을 `@Enumerated(STRING)`으로 저장해요. 프로필과 같은 enum(`com.sudam.domain.user.enums.Subject`)을 써요. 예전 임시 컬럼 `subject_id`는 쓰지 않아요.
+- 구현 메모 (팀 결정, 위 표보다 우선): `teacher_id`는 `TeacherProfile` 연관관계(`@ManyToOne(LAZY)`)예요. `teacher_profiles`의 PK가 `users.id`라 값은 그대로 `users.id`예요. 과목은 `teacher_profiles.subjects`와 같은 방식으로 `subjects` JSON 컬럼에 `Subject` enum 이름 배열을 저장해요(별도 테이블 없음 — 과목으로 검색하지 않고, 과외 목록 조회에 추가 쿼리가 생기지 않아요). 프로필과 같은 enum(`com.sudam.domain.user.enums.Subject`)을 써요. 화면 표시 이름('영어 · 수학', OTHER는 `subject_other`)은 `Tutoring.subjectNames()`로 만들어요. 예전 단일 컬럼 `subject` · 임시 컬럼 `subject_id`는 쓰지 않아요.
 - 공통 구현 메모 (과외 · 참여자 도메인): UNSIGNED는 붙이지 않았어요(`users`와 같음). ENUM 컬럼은 `@Enumerated(STRING)`이라 Hibernate가 MySQL ENUM으로 만들어요.
 
 ### tutoring_schedules (수업 일정)

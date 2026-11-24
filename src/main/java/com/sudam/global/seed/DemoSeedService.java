@@ -230,7 +230,7 @@ public class DemoSeedService {
                                     boolean unpaidReminderEnabled, int seq, LocalDateTime now) {
         Tutoring tutoring = tutoringRepository.save(Tutoring.builder()
                 .teacher(teacher)
-                .subject(Subject.ENGLISH)
+                .subjects(List.of(Subject.ENGLISH))
                 .studentName(studentName)
                 .gradeLevel(gradeLevel)
                 .gradeSchoolYear(DemoLessonPlan.schoolYear(now.toLocalDate()))

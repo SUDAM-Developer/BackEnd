@@ -51,7 +51,7 @@ class ReportCommentServiceTest {
         TeacherProfile teacher = withId(TeacherProfile.create(
                 User.createTeacher(Provider.KAKAO, "kakao-1", "teacher@sudam.app"),
                 "한서윤", List.of(Subject.ENGLISH), null), TEACHER_ID);
-        Tutoring tutoring = withId(Tutoring.builder().teacher(teacher).subject(Subject.ENGLISH)
+        Tutoring tutoring = withId(Tutoring.builder().teacher(teacher).subjects(List.of(Subject.ENGLISH))
                 .studentName("윤서아").gradeLevel(11).gradeSchoolYear(2026).build(), 10L);
         report = withId(SettlementReport.builder().tutoring(tutoring)
                 .completedCount(8).targetCount(8).canceledCount(0)

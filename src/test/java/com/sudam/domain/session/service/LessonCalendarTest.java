@@ -239,7 +239,7 @@ class LessonCalendarTest {
     }
 
     private static Tutoring tutoring(Long id, LocalDateTime createdAt) {
-        Tutoring tutoring = withId(Tutoring.builder().subject(Subject.ENGLISH).studentName("윤서아")
+        Tutoring tutoring = withId(Tutoring.builder().subjects(List.of(Subject.ENGLISH)).studentName("윤서아")
                 .gradeLevel(10).gradeSchoolYear(2026).build(), id);
         ReflectionTestUtils.setField(tutoring, "createdAt", createdAt);
         return tutoring;
