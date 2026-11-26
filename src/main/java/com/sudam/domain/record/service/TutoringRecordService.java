@@ -42,7 +42,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
-public class RecordService {
+public class TutoringRecordService {
 
     private final TutoringRepository tutoringRepository;
     private final TutoringScheduleRepository tutoringScheduleRepository;

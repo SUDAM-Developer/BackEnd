@@ -56,8 +56,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("RecordService 수업 기록 저장")
-class RecordServiceTest {
+@DisplayName("TutoringRecordService 수업 기록 저장")
+class TutoringRecordServiceTest {
 
     private static final Long TEACHER_ID = 1L;
     private static final Long TUTORING_ID = 10L;
@@ -76,7 +76,7 @@ class RecordServiceTest {
     @Mock private SettlementService settlementService;
 
     @InjectMocks
-    private RecordService recordService;
+    private TutoringRecordService tutoringRecordService;
 
     private Tutoring tutoring;
     private TutoringSchedule schedule;
@@ -120,7 +120,7 @@ class RecordServiceTest {
         given(tutoringPolicyRepository.findAllByTutoringId(TUTORING_ID)).willReturn(List.of(policy));
 
         // when
-        SaveRecordResponse response = recordService.save(TEACHER_ID, TUTORING_ID, request(WEDNESDAY, 7, 7));
+        SaveRecordResponse response = tutoringRecordService.save(TEACHER_ID, TUTORING_ID, request(WEDNESDAY, 7, 7));
 
         // then
         assertThat(response.sessionId()).isEqualTo(1198L);
@@ -218,7 +218,7 @@ class RecordServiceTest {
         given(settlementService.settleIfReached(TUTORING_ID)).willReturn(SettlementResult.settled(88L, 21L, 301L));
 
         // when
-        SaveRecordResponse response = recordService.save(TEACHER_ID, TUTORING_ID, request(WEDNESDAY, 7, 7));
+        SaveRecordResponse response = tutoringRecordService.save(TEACHER_ID, TUTORING_ID, request(WEDNESDAY, 7, 7));
 
         // then
         assertThat(response.noInCycle()).isEqualTo(2);
@@ -251,7 +251,7 @@ class RecordServiceTest {
     }
 
     private void assertRecordError(Long teacherId, SaveRecordRequest request, String code) {
-        assertThatThrownBy(() -> recordService.save(teacherId, TUTORING_ID, request))
+        assertThatThrownBy(() -> tutoringRecordService.save(teacherId, TUTORING_ID, request))
                 .isInstanceOf(RecordException.class)
                 .extracting(e -> ((ProjectException) e).getErrorCode().getCode())
                 .isEqualTo(code);
