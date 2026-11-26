@@ -18,7 +18,8 @@
   - 구현: `com.sudam.global.crypto.AccountNumberConverter` (AES-256-GCM, 저장값 = Base64(IV 12바이트 + 암호문 + 태그)). 키는 `.env`의 `ACCOUNT_ENCRYPTION_KEY`(Base64 32바이트). 매번 새 IV라 같은 계좌번호도 암호문이 달라요
 - 토큰(링크 · 수업 계획서 · 캘린더 구독)은 SecureRandom 32바이트를 URL 안전 문자열로 저장. 재발급은 새 값, 폐기는 NULL 또는 revoked_at
 - ‘조건에 맞는 행은 1개만’ 규칙은 생성 컬럼 + 유일 제약으로 DB에서 보장 (cycles.in_progress_key, invoices.active_cycle_key, payment_requests.pending_key, tutoring_drafts.saved_key, calendar_subscriptions.active_key)
-  - 현재 미구현: 생성 컬럼은 `ddl-auto`로 만들어지지 않아 엔티티에 두지 않았어요. 마이그레이션 도구 도입 전까지는 서비스에서 보장해요
+  - 현재 미구현: 마이그레이션 도구(Flyway)는 도입했지만 생성 컬럼은 아직 추가하지 않았어요. 별도 이슈에서 추가하기 전까지는 서비스에서 보장해요
+- 실제 스키마는 Flyway 마이그레이션(`src/main/resources/db/migration`)이 만들어요. 엔티티를 바꾸면 마이그레이션과 이 문서를 함께 고쳐요
 - 설정값(DB에 두지 않음): 결제 가격, 수담 입금 계좌, 인기 선생님 소개서 건수 · 칸별 사용 비율, 수업료 예시 단가(회당 45,000원), 구독 유예 일수(7일), 구독 안내 시점(결제일 3일 전). 결제 요청에는 그때 금액을 복사해 둠
 - 소개서는 선생님당 1개(다시 만들면 덮어씀). 인기 선생님 사례 데이터는 서비스 DB에 넣지 않음
 
@@ -520,7 +521,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 - `tutoring_id`는 `@ManyToOne(LAZY)` 연관관계예요. `status`는 `CycleStatus`(IN_PROGRESS · SETTLED)를 `@Enumerated(STRING)`으로 저장해요. UNSIGNED는 붙이지 않았어요 (과외 · 참여자 · 교육비 도메인과 같음).
 - 제약은 UNIQUE(tutoring_id, cycle_no)(`uk_cycles_tutoring_cycle_no`)만 만들어요.
-- `in_progress_key` 생성 열과 UNIQUE(tutoring_id, in_progress_key)는 `ddl-auto`로 만들어지지 않아 두지 않았어요. 대신 **과외 행 잠금**으로 '진행 중 사이클은 과외당 1개'를 지켜요: 사이클을 열고 닫는 모든 쪽 — 과외 만들기(사이클 1) · 정산 실행 · 수업 종료 · 수업료 변경 — 은 같은 트랜잭션에서 먼저 `TutoringRepository.findByIdForUpdate`(SELECT … FOR UPDATE)로 과외 행을 잠근 뒤 진행 중 사이클을 조회 · 변경해요. 아래 '정산 실행'의 '진행 중 사이클을 잠그고'도 이 과외 행 잠금으로 구현해요.
+- `in_progress_key` 생성 열과 UNIQUE(tutoring_id, in_progress_key)는 아직 마이그레이션에 추가하지 않았어요(별도 이슈). 대신 **과외 행 잠금**으로 '진행 중 사이클은 과외당 1개'를 지켜요: 사이클을 열고 닫는 모든 쪽 — 과외 만들기(사이클 1) · 정산 실행 · 수업 종료 · 수업료 변경 — 은 같은 트랜잭션에서 먼저 `TutoringRepository.findByIdForUpdate`(SELECT … FOR UPDATE)로 과외 행을 잠근 뒤 진행 중 사이클을 조회 · 변경해요. 아래 '정산 실행'의 '진행 중 사이클을 잠그고'도 이 과외 행 잠금으로 구현해요.
 - 메서드: `Cycle.open(tutoring, cycleNo, startedAt)` → IN_PROGRESS, `settle(settledAt)` → SETTLED (이미 정산됐으면 `CYCLE409_1`), `isInProgress()`.
 - 레포지토리 `CycleRepository`: `findByTutoringIdAndStatus`(진행 중 사이클은 IN_PROGRESS로 조회), `findByTutoringIdAndCycleNo`, `findAllByTutoringIdOrderByCycleNo`.
 - 회차(`sessions.cycle_id`)는 이 엔티티를 `@ManyToOne(LAZY)`로 참조해요. 교육비의 `billed_cycle_id`는 아직 숫자 열이에요(교육비 구현 메모).

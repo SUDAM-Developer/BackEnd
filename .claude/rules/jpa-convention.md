@@ -42,7 +42,7 @@ public class User {
 - PK는 `Long` + `GenerationType.IDENTITY` (MySQL `AUTO_INCREMENT`).
 - enum 필드는 반드시 `@Enumerated(EnumType.STRING)`. 서수 저장은 값 추가 시 데이터가 깨진다.
 - 테이블/컬럼명은 snake_case. `user`, `order` 같은 예약어 충돌을 피해 `@Table(name = "users")`처럼 명시한다.
-- 제약은 DB에도 걸린다: `nullable`, `length`, `unique`를 `@Column`/`@Table(uniqueConstraints = ...)`에 선언한다 (`ddl-auto: create`라 스키마가 엔티티에서 생성된다).
+- 제약은 DB에도 걸린다: `nullable`, `length`, `unique`를 `@Column`/`@Table(uniqueConstraints = ...)`에 선언한다 (실제 스키마는 마이그레이션 SQL이 만들므로 양쪽을 같게 맞춘다).
 - `equals`/`hashCode`를 Lombok으로 생성하지 않는다. 필요하면 ID 기반으로 직접 구현한다.
 - 생성/수정 시각이 필요하면 `BaseTimeEntity`(`@MappedSuperclass` + `@EntityListeners(AuditingEntityListener.class)`)를 `global`에 만들어 상속한다. 이때 `@EnableJpaAuditing`도 설정 클래스에 추가해야 한다.
 
@@ -69,4 +69,14 @@ public class User {
 
 ## 스키마 주의
 
-`ddl-auto: create`라서 부팅마다 대상 DB가 drop/recreate된다. 엔티티 변경 시 마이그레이션은 필요 없지만, 로컬 데이터는 매번 날아간다는 전제로 작업한다. 공유 DB를 가리키지 말 것.
+스키마는 Flyway만 바꾼다. Hibernate는 `ddl-auto: validate`로 검사만 하며, 어느 프로파일에서도 `create` · `update`로 바꾸지 않는다.
+
+- 위치는 `src/main/resources/db/migration`, 이름은 `V{버전}__{설명}.sql`(언더스코어 2개). 버전은 1부터 증가하는 정수, 설명은 영문 소문자 snake_case — `V2__add_users_nickname.sql`.
+- 엔티티 변경과 마이그레이션 SQL을 **같은 PR**에 담는다. 엔티티만 바꾸면 기동이 실패한다.
+- 이미 머지된 파일은 수정 · 삭제 · 이름 변경하지 않는다(체크섬 검증 실패로 기동되지 않는다). 고칠 것이 있으면 새 버전을 추가한다.
+- 머지 전 최신 `dev`의 마지막 버전을 확인한다. 번호가 겹치거나 더 낮으면 나중에 머지하는 쪽이 번호를 올린다.
+- enum 컬럼은 MySQL `ENUM`이다. Java enum에 값을 추가하면 `ALTER TABLE ... MODIFY` 마이그레이션도 추가한다.
+- `validate`는 FK · UNIQUE · 인덱스 누락을 잡지 못한다. 엔티티와 SQL이 같은지 리뷰에서 확인한다.
+- 제약 이름은 직접 붙인다: `fk_<테이블>_<컬럼>`, `uk_<테이블>_<컬럼>`, `idx_<테이블>_<컬럼>`. 해시 이름에 의존하지 않는다.
+- MySQL은 DDL을 롤백하지 못한다. 파일 하나에는 작은 단위의 변경만 담는다.
+- 데이터가 있는 테이블에 NOT NULL 컬럼을 더할 때는 기존 행을 채우는 방법(DEFAULT 또는 단계별 UPDATE)을 함께 적는다.

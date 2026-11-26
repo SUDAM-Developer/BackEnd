@@ -168,10 +168,45 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 
 - `application.yaml`이 `optional:file:.env[.properties]`를 import한다. 키: `DB_URL` `DB_USERNAME` `DB_PASSWORD` `KAKAO_CLIENT_ID` `KAKAO_CLIENT_SECRET` `JWT_SECRET` `ACCOUNT_ENCRYPTION_KEY`(Base64 32바이트, 없거나 길이가 틀리면 기동 실패). Redis 호스트 · 포트와 리다이렉트 URI는 `application-local.yaml`.
 - MySQL과 Redis가 모두 떠 있어야 한다. Redis가 없으면 부팅은 되지만 로그인과 인증 요청이 깨진다.
-- JPA: `ddl-auto: create`(부팅마다 스키마 재생성), `open-in-view: false`, `default_batch_fetch_size: 100`.
-- 시드: `spring.sql.init.mode: always`로 스키마 생성 뒤 `data.sql`이 매번 실행된다. 현재는 약관 3행(SERVICE · PRIVACY · CONTACT, 모두 필수). 약관은 코드로 만들지 않으므로 새 버전은 이 파일에 행을 추가한다.
+- JPA: `ddl-auto: validate`(스키마는 Flyway가 만든다. 아래 'DB 스키마 (Flyway)'), `open-in-view: false`, `default_batch_fetch_size: 100`.
+- 약관: 3행(SERVICE · PRIVACY · CONTACT, 모두 필수)을 환경마다 직접 INSERT한다. 코드나 마이그레이션으로 만들지 않는다. 내용이 바뀌면 같은 `code`의 `version`을 올린 행을 추가한다.
 - Swagger: `/swagger-ui.html`, `/v3/api-docs`. `@Tag` · `@Operation` 요약만 담고 에러 코드별 응답은 `docs/api-spec.md`가 기준이다.
 - 토큰 만료: AT 30분, RT 14일 (`application.yaml`의 `jwt.*`).
+
+### DB 스키마 (Flyway)
+
+부팅 때 `src/main/resources/db/migration`의 SQL 중 아직 적용되지 않은 것을 버전 순서로 적용하고 `flyway_schema_history`에 기록한다. 그 뒤 Hibernate가 엔티티와 맞는지 검사한다(`validate`). 마이그레이션 작성 규칙은 `.claude/rules/jpa-convention.md`.
+
+**로컬 DB 처음 만들기 · 초기화** — Flyway 도입 전부터 쓰던 로컬 DB는 한 번 비워야 한다. 로컬 DB에서만 실행한다.
+
+1. 로컬 MySQL에서 스키마를 다시 만든다.
+
+   ```sql
+   DROP DATABASE IF EXISTS sudam;
+   CREATE DATABASE sudam CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+   ```
+
+2. 로컬 Redis를 비운다 (`docker exec redis redis-cli FLUSHDB`). 회원 ID가 1부터 다시 매겨져 옛 토큰이 다른 회원의 것이 될 수 있다.
+3. 시드를 끄고(`SUDAM_SEED_ENABLED=false`) 애플리케이션을 켠다. V1부터 적용된다.
+4. 약관을 넣는다. 시드는 그 뒤에 켠다.
+
+**약관 INSERT** — 약관이 없으면 에러 없이 필수 약관이 0개로 처리돼 `TERMS_REQUIRED`를 건너뛴다. 사용자가 접속하거나 시드를 켜기 전에 넣는다.
+
+```sql
+INSERT INTO terms (code, version, title, is_required, effective_at) VALUES
+    ('SERVICE', 1, '서비스 이용약관', true, '2026-01-01 00:00:00'),
+    ('PRIVACY', 1, '개인정보 수집 · 이용', true, '2026-01-01 00:00:00'),
+    ('CONTACT', 1, '학부모 · 학생 연락처 처리', true, '2026-01-01 00:00:00');
+```
+
+**개발 서버를 Flyway로 전환 (최초 1회)** — `dev`에 push되면 자동 배포되므로 순서를 지킨다. 기존 데이터는 모두 사라진다.
+
+1. 팀에 공지하고 RDS 스냅샷을 만든다. `ENV_VARS`에서 `SUDAM_SEED_ENABLED` · `SUDAM_SEED_RESET`을 끄고 `JWT_SECRET`을 새 값으로 바꾼다. `SPRING_JPA_HIBERNATE_DDL_AUTO`가 없는지도 확인한다.
+2. EC2에서 애플리케이션을 멈춘다 (`sudo docker stop spring-app`).
+3. 접속한 호스트와 DB 이름을 확인하고 RDS 스키마를 비운다.
+4. Redis를 비운다 (`sudo docker exec redis redis-cli FLUSHDB`).
+5. PR을 머지한다. 배포 로그에서 V1 적용을 확인한다.
+6. 바로 약관을 넣는다. 시연 데이터가 필요하면 그 뒤에 시드를 켜고 다시 배포한다.
 
 ### 시연용 가상 데이터
 
@@ -188,9 +223,9 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 - 회원번호가 기본값이면 부팅 로그에 액세스 토큰을 한 번 출력한다 (30분 뒤 만료, 다시 받으려면 재부팅). 파일 · DB · 응답에는 남기지 않는다.
 - 회원번호를 넣으면 실제 사람 계정이므로 토큰을 출력하지 않는다. 그 카카오 계정으로 한 번 로그인해 둔 회원이 있으면 그 회원에 데이터를 붙이고, 없으면 새로 만든다. 시연 때 카카오 로그인으로 들어간다.
 
-**반복 실행** — 시드 선생님(KAKAO, 회원번호)에게 과외가 하나라도 있으면 아무것도 만들지 않고 `가상 데이터가 이미 있어 건너뜀` 로그만 남긴다. `ddl-auto: create`면 부팅마다 새로 만들어지고, `update`면 처음 한 번만 만들어진다.
+**반복 실행** — 시드 선생님(KAKAO, 회원번호)에게 과외가 하나라도 있으면 아무것도 만들지 않고 `가상 데이터가 이미 있어 건너뜀` 로그만 남긴다. 데이터가 부팅 사이에 유지되므로 처음 한 번만 만들어진다.
 
-**리셋 (UT 리허설 뒤 되돌리기)** — `update`(개발 서버)에서 리허설로 바뀐 데이터를 처음 상태로 돌린다.
+**리셋 (UT 리허설 뒤 되돌리기)** — 리허설로 바뀐 데이터를 처음 상태로 돌린다.
 
 1. `SUDAM_SEED_RESET=true`로 재기동한다. `DemoSeedResetter`가 시드 선생님의 과외와 그 아래 데이터(일정 · 교재 · 정책 · 설정 · 참여자 · 사이클 · 회차 · 기록 · 진도 · 리포트 · 청구 · 입금 · 교육비 조정)를 FK 역순으로 지우고, 같은 트랜잭션에서 시드를 다시 만든다. 다시 만들다 실패하면 삭제도 롤백된다.
 2. User · TeacherProfile · 약관 동의는 지우지 않는다. 카카오로 로그인한 상태가 그대로 유지된다. 회원번호를 넣은 실제 계정이면 그 계정에서 손으로 만든 과외도 함께 지워진다.
@@ -229,12 +264,12 @@ GET  /api/v1/users/me/settings          profile · provider만 DB 값, 소개서
 4. `GET /api/v1/reports/{reportId}` → 김서아 8/8 리포트. 실제 정산으로 만든 리포트라 코멘트가 없다(`comment: null`). 보내려면 먼저 `PUT .../comment`로 작성한다.
 5. `GET /api/v1/invoices` → 1,560,000 / 400,000 / 1,160,000, 카드 5장(김서아 '다음 8회차' 360,000이 입금 대기로 추가).
 
-**배포에서 쓸 때 주의** — 시연이 끝나면 `SUDAM_SEED_ENABLED`를 끈다. `ddl-auto: create`면 재배포(재부팅)마다 처음 상태로 돌아간다. `update`에서 옛 시드(리포트 없음 · 코멘트 없음)가 이미 있으면 한 번 `SUDAM_SEED_RESET=true`로 재기동해야 리포트 · AI 초안이 생긴다. 리허설에서 보낸(SENT) 박지후 리포트 · 열람 기록 · 다시 보낸 입금 안내도 리셋해야 처음 상태로 돌아온다. 기본 계정의 토큰이 서버 로그에 남으므로 로그 접근 범위를 확인한다.
+**배포에서 쓸 때 주의** — 시연이 끝나면 `SUDAM_SEED_ENABLED`를 끈다. 옛 시드(리포트 없음 · 코멘트 없음)가 이미 있으면 한 번 `SUDAM_SEED_RESET=true`로 재기동해야 리포트 · AI 초안이 생긴다. 리허설에서 보낸(SENT) 박지후 리포트 · 열람 기록 · 다시 보낸 입금 안내도 리셋해야 처음 상태로 돌아온다. 기본 계정의 토큰이 서버 로그에 남으므로 로그 접근 범위를 확인한다.
 
 ## 아직 정해지지 않은 것
 
 - 다중 기기 로그인 — `rt:{userId}`가 회원당 1개라 두 번째 로그인이 첫 세션을 끊는다.
 - 탈퇴 보강 — 카카오 unlink, 재가입 제한, 타 도메인 연락처 정리.
-- 운영 프로파일 — `application-prod.yaml`, `ddl-auto` 전략, 마이그레이션 도구. 개발 서버는 `application-dev.yaml`(`ddl-auto: update`, 쿠키 `Secure`, 도메인 기준 리다이렉트 · CORS 출처)을 쓴다.
-- ERD의 생성 컬럼 + 유일 제약 — `ddl-auto`로 만들 수 없어 마이그레이션 도구 도입 전까지 서비스에서 보장한다.
+- 운영 프로파일 — `application-prod.yaml`. 개발 서버는 `application-dev.yaml`(`ddl-auto: validate` 고정, 쿠키 `Secure`, 도메인 기준 리다이렉트 · CORS 출처)을 쓴다.
+- ERD의 생성 컬럼 + 유일 제약 — Flyway로 추가할 수 있지만 아직 만들지 않았다. 별도 이슈에서 추가하기 전까지 서비스에서 보장한다.
 - 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산은 수업 기록 저장이 같은 트랜잭션에서 실행한다 (`RecordService` → `SettlementService.settleIfReached`).

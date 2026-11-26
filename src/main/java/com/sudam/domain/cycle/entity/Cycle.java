@@ -26,7 +26,7 @@ import java.time.LocalDateTime;
  * 수업 사이클 = 정산 회차만큼의 수업 묶음. 정산하면 SETTLED가 되고 다음 사이클이 열린다.
  * 회차(sessions.cycle_id)가 이 엔티티를 참조한다.
  *
- * <p>'진행 중 사이클은 과외당 1개'(ERD의 in_progress_key 생성 열)는 ddl-auto로 만들어지지 않아 DB로 보장하지 않는다.
+ * <p>'진행 중 사이클은 과외당 1개'(ERD의 in_progress_key 생성 열)는 아직 마이그레이션에 추가하지 않아 DB로 보장하지 않는다.
  * 사이클을 열고 닫는 모든 쪽 — 과외 만들기 · 정산 실행 · 수업 종료 · 수업료 변경 — 은
  * 먼저 {@code TutoringRepository.findByIdForUpdate}로 과외 행을 잠근 뒤 진행 중 사이클을 조회 · 변경한다.
  */
