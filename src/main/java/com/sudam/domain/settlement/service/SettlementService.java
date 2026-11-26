@@ -3,6 +3,7 @@ package com.sudam.domain.settlement.service;
 import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import com.sudam.domain.cycle.repository.CycleRepository;
+import com.sudam.domain.cycle.service.CycleOpener;
 import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.entity.InvoiceSnapshot;
 import com.sudam.domain.invoice.enums.InvoiceKind;
@@ -43,6 +44,7 @@ public class SettlementService {
     private final TutoringRepository tutoringRepository;
     private final TutoringPolicyRepository tutoringPolicyRepository;
     private final CycleRepository cycleRepository;
+    private final CycleOpener cycleOpener;
     private final InvoiceRepository invoiceRepository;
     private final CycleSessionReader cycleSessionReader;
     private final SettlementReportCreator settlementReportCreator;
@@ -94,10 +96,9 @@ public class SettlementService {
         }
 
         // 5. 사이클 교체: 지금 사이클을 닫고 바로 다음 사이클을 연다. 정산과 같은 시각을 써서 두 사이클의 경계를 맞춘다.
-        //    Clock 빈을 쓰는 이유는 테스트에서 고정 시각을 넣기 위해서다.
         LocalDateTime now = LocalDateTime.now(clock);
         cycle.settle(now);
-        Cycle next = cycleRepository.save(Cycle.open(tutoring, cycleNo + 1, now));
+        Cycle next = cycleOpener.openNext(tutoring, now);
 
         // 6. 리포트 생성: 리포트를 먼저 만든다. 리포트는 청구 ID를 갖지 않고, 리포트 쪽은 invoices.report_id로 청구를 찾는다.
         Long reportId = settlementReportCreator.create(tutoringId, cycle.getId());
