@@ -159,7 +159,7 @@
 
 **내 정보** — `{ role: "TEACHER", name: string|null, status }`. `status`는 계산값: 현재 필수 약관 중 미동의가 있으면 `TERMS_REQUIRED`, 프로필이 없으면 `PROFILE_REQUIRED`, 그 외 `ACTIVE`. 에러 `USER404_1`.
 
-**약관 동의** — 요청 `{ termsCodes: ["SERVICE", "PRIVACY", "CONTACT"] }` (1개 이상, 중복 무시). 각 코드의 현재 최신 버전에 동의 기록. 응답 `{ agreements: [{ code, agreedAt }] }`. 멱등(이미 동의했으면 기존 `agreedAt`). 약관 행은 `data.sql` 시드.
+**약관 동의** — 요청 `{ termsCodes: ["SERVICE", "PRIVACY", "CONTACT"] }` (1개 이상, 중복 무시). 각 코드의 현재 최신 버전에 동의 기록. 응답 `{ agreements: [{ code, agreedAt }] }`. 멱등(이미 동의했으면 기존 `agreedAt`). 약관 행은 환경마다 직접 INSERT (`docs/architecture.md`).
 - `COMMON400` 빈 목록 · 알 수 없는 코드 / `USER400_1` 필수 약관 누락(부분 저장 없음) / `USER404_1`
 
 **프로필 등록 · 수정** — 요청 `{ name: 2~10자, subjects: [ENGLISH|MATH|KOREAN|SCIENCE|SOCIAL|OTHER] (1개 이상), subjectOther: 20자 이내, OTHER일 때 필수 }`. 응답 등록 `{ createdAt }`, 수정 `{ updatedAt }`. 약관 동의 여부는 검사하지 않는다.

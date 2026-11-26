@@ -14,19 +14,15 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
         default_batch_fetch_size: 100
     open-in-view: false
-    defer-datasource-initialization: true
 
-  # MySQL은 기본값(embedded)에서 data.sql을 실행하지 않으므로 always로 켠다.
-  sql:
-    init:
-      mode: always
-      encoding: UTF-8
+  flyway:
+    clean-disabled: true
 
   security:
     oauth2:

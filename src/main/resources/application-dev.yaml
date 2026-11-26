@@ -7,12 +7,10 @@ server:
 spring:
   jpa:
     hibernate:
-      # 기본값 create는 부팅마다 스키마를 지우므로, RDS 데이터가 남도록 update를 쓴다.
-      ddl-auto: update
+      ddl-auto: validate
 
   data:
     redis:
-      # 컨테이너 안의 localhost는 자기 자신이므로 compose 서비스명으로 연결한다.
       host: redis
       port: 6379
 
@@ -21,7 +19,6 @@ spring:
       client:
         registration:
           kakao:
-            # 카카오 개발자 콘솔에도 같은 URI를 등록해야 한다.
             redirect-uri: ${APP_BASE_URL}/login/oauth2/code/kakao
 
 app:
@@ -29,7 +26,6 @@ app:
     success-redirect-uri: ${FRONT_BASE_URL}/login/success
     failure-redirect-uri: ${FRONT_BASE_URL}/login/failure
   cookie:
-    # 개발 서버는 HTTPS이므로 RT 쿠키를 HTTPS 요청에만 싣는다
     secure: true
   cors:
     # 배포된 프론트(FRONT_BASE_URL)와, 개발 서버 API를 쓰는 로컬 프론트

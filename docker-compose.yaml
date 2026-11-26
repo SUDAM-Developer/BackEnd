@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     environment:
-      # application-dev.yaml 적용 (ddl-auto: update, Redis 호스트, 도메인 기준 리다이렉트 URI)
+      # application-dev.yaml 적용 (ddl-auto: validate, Redis 호스트, 도메인 기준 리다이렉트 URI)
       SPRING_PROFILES_ACTIVE: dev
       TZ: Asia/Seoul
     # Nginx만 접근하도록 호스트의 루프백에만 연다 (외부에서 8080 직접 접근 불가)

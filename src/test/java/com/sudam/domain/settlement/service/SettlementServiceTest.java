@@ -3,6 +3,7 @@ package com.sudam.domain.settlement.service;
 import com.sudam.domain.cycle.entity.Cycle;
 import com.sudam.domain.cycle.enums.CycleStatus;
 import com.sudam.domain.cycle.repository.CycleRepository;
+import com.sudam.domain.cycle.service.CycleOpener;
 import com.sudam.domain.invoice.entity.CanceledLesson;
 import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.entity.InvoiceSnapshot;
@@ -76,6 +77,8 @@ class SettlementServiceTest {
     @Mock
     private CycleRepository cycleRepository;
     @Mock
+    private CycleOpener cycleOpener;
+    @Mock
     private InvoiceRepository invoiceRepository;
     @Mock
     private CycleSessionReader cycleSessionReader;
@@ -90,7 +93,7 @@ class SettlementServiceTest {
     void setUp() {
         Clock clock = Clock.fixed(ZonedDateTime.of(NOW, SEOUL).toInstant(), SEOUL);
         settlementService = new SettlementService(tutoringRepository, tutoringPolicyRepository, cycleRepository,
-                invoiceRepository, cycleSessionReader, settlementReportCreator, clock);
+                cycleOpener, invoiceRepository, cycleSessionReader, settlementReportCreator, clock);
 
         tutoring = Tutoring.builder()
                 .teacher(TEACHER)
@@ -131,8 +134,7 @@ class SettlementServiceTest {
         // then
         assertThat(result).isEqualTo(SettlementResult.notSettled());
         assertThat(cycle.getStatus()).isEqualTo(CycleStatus.IN_PROGRESS);
-        verify(cycleRepository, never()).save(any());
-        verifyNoInteractions(settlementReportCreator, invoiceRepository);
+        verifyNoInteractions(cycleOpener, settlementReportCreator, invoiceRepository);
     }
 
     @Test
@@ -155,18 +157,13 @@ class SettlementServiceTest {
         assertThat(cycle.getStatus()).isEqualTo(CycleStatus.SETTLED);
         assertThat(cycle.getSettledAt()).isEqualTo(NOW);
 
-        InOrder order = inOrder(tutoringRepository, cycleRepository, settlementReportCreator, invoiceRepository);
+        // 다음 사이클의 번호 · 상태는 CycleOpenerTest가 검증한다. 여기서는 잠근 과외와 정산 시각으로 여는지만 본다.
+        InOrder order = inOrder(tutoringRepository, cycleOpener, settlementReportCreator, invoiceRepository);
         order.verify(tutoringRepository).findByIdForUpdate(TUTORING_ID);
-        ArgumentCaptor<Cycle> nextCycle = ArgumentCaptor.forClass(Cycle.class);
-        order.verify(cycleRepository).save(nextCycle.capture());
+        order.verify(cycleOpener).openNext(tutoring, NOW);
         order.verify(settlementReportCreator).create(TUTORING_ID, CYCLE_ID);
         ArgumentCaptor<Invoice> invoice = ArgumentCaptor.forClass(Invoice.class);
         order.verify(invoiceRepository).save(invoice.capture());
-
-        assertThat(nextCycle.getValue().getCycleNo()).isEqualTo(CYCLE_NO + 1);
-        assertThat(nextCycle.getValue().isInProgress()).isTrue();
-        assertThat(nextCycle.getValue().getStartedAt()).isEqualTo(NOW);
-        assertThat(nextCycle.getValue().getTutoring()).isSameAs(tutoring);
 
         Invoice issued = invoice.getValue();
         assertThat(issued.getKind()).isEqualTo(InvoiceKind.CURRENT);
@@ -226,7 +223,8 @@ class SettlementServiceTest {
 
         // then
         assertThat(result.settled()).isFalse();
-        verifyNoInteractions(cycleRepository, cycleSessionReader, settlementReportCreator, invoiceRepository);
+        verifyNoInteractions(cycleRepository, cycleOpener, cycleSessionReader, settlementReportCreator,
+                invoiceRepository);
     }
 
     @Test
@@ -250,7 +248,8 @@ class SettlementServiceTest {
         // then
         assertThat(deletedResult.settled()).isFalse();
         assertThat(missingResult.settled()).isFalse();
-        verifyNoInteractions(cycleRepository, cycleSessionReader, settlementReportCreator, invoiceRepository);
+        verifyNoInteractions(cycleRepository, cycleOpener, cycleSessionReader, settlementReportCreator,
+                invoiceRepository);
     }
 
     @Test
@@ -266,8 +265,7 @@ class SettlementServiceTest {
 
         // then
         assertThat(result.settled()).isFalse();
-        verify(cycleRepository, never()).save(any());
-        verifyNoInteractions(cycleSessionReader, settlementReportCreator, invoiceRepository);
+        verifyNoInteractions(cycleOpener, cycleSessionReader, settlementReportCreator, invoiceRepository);
     }
 
     @Test
@@ -276,7 +274,7 @@ class SettlementServiceTest {
         // given
         givenLockedTutoringWithCycle(List.of(policy(1, 8, PaymentTiming.POSTPAID, 360_000, 1L)));
         given(cycleSessionReader.countRecognized(TUTORING_ID, CYCLE_ID)).willReturn(8);
-        given(cycleRepository.save(any(Cycle.class))).willAnswer(invocation -> invocation.getArgument(0));
+        givenOpensNextCycle();
         IllegalStateException failure = new IllegalStateException("리포트 저장 실패");
         given(settlementReportCreator.create(TUTORING_ID, CYCLE_ID)).willThrow(failure);
 
@@ -294,16 +292,23 @@ class SettlementServiceTest {
 
     // IDENTITY 전략이라 save 직후 ID가 생기는 것을 흉내 낸다.
     private void givenSavesAssignIds() {
-        given(cycleRepository.save(any(Cycle.class))).willAnswer(invocation -> {
-            Cycle saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", NEXT_CYCLE_ID);
-            return saved;
-        });
+        givenOpensNextCycle();
         given(settlementReportCreator.create(TUTORING_ID, CYCLE_ID)).willReturn(REPORT_ID);
         given(invoiceRepository.save(any(Invoice.class))).willAnswer(invocation -> {
             Invoice saved = invocation.getArgument(0);
             ReflectionTestUtils.setField(saved, "id", INVOICE_ID);
             return saved;
+        });
+    }
+
+    // 잠근 과외 · 정산 시각으로 열 때만 다음 사이클(NEXT_CYCLE_ID)을 돌려준다.
+    // settle()은 엔티티 메서드라 InOrder로 순서를 볼 수 없어, 열리는 순간 지금 사이클이 이미 SETTLED인지 확인한다.
+    private void givenOpensNextCycle() {
+        given(cycleOpener.openNext(tutoring, NOW)).willAnswer(invocation -> {
+            assertThat(cycle.getStatus()).isEqualTo(CycleStatus.SETTLED);
+            Cycle next = Cycle.open(tutoring, CYCLE_NO + 1, NOW);
+            ReflectionTestUtils.setField(next, "id", NEXT_CYCLE_ID);
+            return next;
         });
     }
 

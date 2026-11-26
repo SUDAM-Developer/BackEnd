@@ -43,7 +43,8 @@ docker run -d --name redis -p 6379:6379 redis:7-alpine
 
 - import가 `optional:`이라 `.env`가 없으면 친절한 메시지 없이 `${DB_URL}` 미해석으로 `DataSourceProperties$DataSourceBeanCreationException`이 터진다. 이 예외를 만나면 코드 문제가 아니라 `.env` 누락/불완전이 원인이다.
 - `SudamApplicationTests`는 전체 `@SpringBootTest`라 **테스트에도 실제 MySQL 연결이 필요**하다. H2 폴백이나 Testcontainers는 없다. 그래서 기본 선택은 컨텍스트를 띄우지 않는 단위 테스트다 (`.claude/rules/test-convention.md`).
-- `ddl-auto: create`이므로 부팅마다 대상 DB 스키마가 drop/recreate된다. `DB_URL`을 보존해야 하는 DB로 절대 가리키지 말 것.
+- 스키마는 **Flyway**(`src/main/resources/db/migration`)가 부팅 때 적용하고, Hibernate는 `ddl-auto: validate`로 검사만 한다. 데이터는 재부팅해도 유지된다. 엔티티를 바꾸면 같은 PR에 마이그레이션 SQL을 추가한다 (`.claude/rules/jpa-convention.md`).
+- 이력 테이블 없이 테이블만 있는 DB면 `Found non-empty schema(s)`로 기동이 실패한다. 로컬 DB를 비우고 다시 켠다 (`docs/architecture.md`의 'DB 스키마 (Flyway)').
 
 ## Spring Boot 4 — 스타터 이름이 Boot 3와 다르다
 
