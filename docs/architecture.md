@@ -62,11 +62,12 @@ com.sudam
 │   │   ├── repository
 │   │   ├── dto/response/ReportResponse
 │   │   └── exception                   # ReportException, code/ReportErrorCode · ReportSuccessCode
-│   ├── cycle                           # 수업 사이클 = 정산 단위 묶음 (엔티티 · 레포지토리만)
+│   ├── cycle                           # 수업 사이클 = 정산 단위 묶음
 │   │   ├── entity/Cycle.java           # open / settle / isInProgress
 │   │   ├── enums/CycleStatus.java      # IN_PROGRESS, SETTLED
-│   │   ├── repository                  # CycleRepository: 진행 중 · 번호별 · 과외별 목록 조회
-│   │   └── exception                   # CycleException, code/CycleErrorCode (CYCLE409_1)
+│   │   ├── repository                  # CycleRepository: 진행 중 · 번호별 · 마지막 · 과외별 목록 조회
+│   │   ├── service/CycleOpener.java    # openNext: 사이클을 여는 유일한 창구 (MANDATORY). 과외 만들기 · 정산이 부른다
+│   │   └── exception                   # CycleException, code/CycleErrorCode (CYCLE409_1, CYCLE409_2)
 │   ├── invoice                         # 교육비 청구 · 입금 · 금액 수정 이력 (엔티티 · 레포지토리만)
 │   │   ├── entity                      # Invoice, InvoicePayment, InvoiceAmountAdjustment
 │   │   │   └── InvoiceSnapshot.java    # 계산 근거 JSON 값 객체 (CanceledLesson, RecordedPayment 포함)

@@ -523,7 +523,12 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 - 제약은 UNIQUE(tutoring_id, cycle_no)(`uk_cycles_tutoring_cycle_no`)만 만들어요.
 - `in_progress_key` 생성 열과 UNIQUE(tutoring_id, in_progress_key)는 아직 마이그레이션에 추가하지 않았어요(별도 이슈). 대신 **과외 행 잠금**으로 '진행 중 사이클은 과외당 1개'를 지켜요: 사이클을 열고 닫는 모든 쪽 — 과외 만들기(사이클 1) · 정산 실행 · 수업 종료 · 수업료 변경 — 은 같은 트랜잭션에서 먼저 `TutoringRepository.findByIdForUpdate`(SELECT … FOR UPDATE)로 과외 행을 잠근 뒤 진행 중 사이클을 조회 · 변경해요. 아래 '정산 실행'의 '진행 중 사이클을 잠그고'도 이 과외 행 잠금으로 구현해요.
 - 메서드: `Cycle.open(tutoring, cycleNo, startedAt)` → IN_PROGRESS, `settle(settledAt)` → SETTLED (이미 정산됐으면 `CYCLE409_1`), `isInProgress()`.
-- 레포지토리 `CycleRepository`: `findByTutoringIdAndStatus`(진행 중 사이클은 IN_PROGRESS로 조회), `findByTutoringIdAndCycleNo`, `findAllByTutoringIdOrderByCycleNo`.
+- **사이클 열기는 `com.sudam.domain.cycle.service.CycleOpener.openNext(tutoring, startedAt)` 하나로 해요** (#59). 과외 만들기(사이클 1)와 정산 실행(다음 사이클)이 부르고, `Cycle.open`을 직접 부르는 곳은 이 서비스와 시드뿐이에요.
+  - 마지막 사이클(번호가 가장 큰 행)이 없으면 1번, SETTLED면 그 번호 + 1로 열어요. IN_PROGRESS면 `CYCLE409_2`를 던지고 저장하지 않아요.
+  - `MANDATORY`라 부르는 쪽의 트랜잭션에 참여만 해요. 과외 행 잠금은 부르는 쪽이 먼저 해요 (잠금이 보호할 범위가 사이클 열기보다 넓어서).
+  - 상태가 아니라 번호로 마지막 행을 고르는 이유: 정산은 같은 트랜잭션에서 `settle()`한 직후 부르는데, 번호는 `settle()`로 바뀌지 않아 flush 여부와 관계없이 같은 행이 골라지고, 돌아온 객체는 영속성 컨텍스트의 그 객체라 SETTLED가 그대로 보여요.
+  - `startedAt`은 부르는 쪽이 `Clock`으로 만들어 넘겨요. 정산은 `settle(now)`와 같은 `now`를 넘겨 두 사이클의 경계를 맞춰요.
+- 레포지토리 `CycleRepository`: `findByTutoringIdAndStatus`(진행 중 사이클은 IN_PROGRESS로 조회), `findByTutoringIdAndCycleNo`, `findTopByTutoringIdOrderByCycleNoDesc`(마지막 사이클, 사이클 열기용), `findAllByTutoringIdOrderByCycleNo`.
 - 회차(`sessions.cycle_id`)는 이 엔티티를 `@ManyToOne(LAZY)`로 참조해요. 교육비의 `billed_cycle_id`는 아직 숫자 열이에요(교육비 구현 메모).
 
 ### sessions (수업 회차)
@@ -881,7 +886,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 2. 진행 중 사이클 조회. 없으면 `settled = false`.
 3. 이 사이클 번호의 정책 = `TutoringPolicies.applicableTo(정책 목록, cycleNo)`. 없으면 `SETTLEMENT500_1` (데이터 오류).
 4. `CycleSessionReader.countRecognized` < 정책 정산 회차면 `settled = false`. 인정 회차가 더 많은 경우는 P0에서 생기지 않아요(정산 회차 축소는 P1). 생기면 경고 로그를 남기고 그대로 정산해요. P1에서는 넘치는 회차의 cycle_id를 새 사이클로 옮기고, 옮긴 수가 새 사이클 정산 회차 이상이면 반복해요.
-5. `cycle.settle(now)` → `Cycle.open(tutoring, cycleNo + 1, now)` 저장. 시각은 주입받은 `Clock`(Asia/Seoul) 기준이에요.
+5. `cycle.settle(now)` → `CycleOpener.openNext(tutoring, now)`로 다음 사이클(cycleNo + 1)을 열어요. 시각은 주입받은 `Clock`(Asia/Seoul) 기준이에요.
 6. `SettlementReportCreator.create(tutoringId, cycleId)` → reportId.
 7. 청구 생성 `Invoice.issue(policy, billedCycleId, reportId, kind, amount, snapshot)`. 계좌는 그 정책에서 복사해요.
    - **후불**: kind = CURRENT, 청구 대상 = 이번 사이클, 이번 사이클 정책, **금액 = 수업료 그대로** (회차를 다 채웠으니까요. 인정 회차 × 회당 단가는 단가 버림 때문에 수업료보다 작을 수 있어요).
@@ -908,7 +913,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 | | `List<CanceledLesson> canceledIn(Long tutoringId, Long cycleId)` | 그 사이클 기간의 CANCELED 회차(인정 · 미인정 모두) 날짜순. `com.sudam.domain.invoice.entity.CanceledLesson`, cancelReason은 enum 이름 문자열. 없으면 빈 목록 |
 | `SettlementReportCreator` | `Long create(Long tutoringId, Long cycleId)` | 방금 SETTLED로 바꾼 사이클의 정산 리포트 행(통계 · 진도 표, ai_status = PENDING)을 만들고 id 반환. 청구 ID는 갖지 않음. 실패하면 예외 (잡지 않음) |
 
-**선불 첫 청구 (2.2.6)**: 과외 생성 때 사이클 1과 그 청구(kind = FIRST, report_id NULL)를 함께 만들어요. [이미 받았어요]면 입금 행을 넣고 PAID.
+**선불 첫 청구 (2.2.6)**: 과외 생성 때 사이클 1과 그 청구(kind = FIRST, report_id NULL)를 함께 만들어요. 사이클 1은 `CycleOpener.openNext(tutoring, now)`로 열고, 그 id를 FIRST 청구의 `billed_cycle_id`로 써요. [이미 받았어요]면 입금 행을 넣고 PAID.
 
 **입금 상태**: [입금했어요]는 PENDING · PARTIAL에서만 CONFIRM_REQUESTED로 (먼저 누른 한 명). 선생님 [전액 입금 완료] · 일부 입금은 입금 행을 넣고(잔액보다 크면 잔액까지만, 6.3.1) 합계가 amount 이상이면 PAID, 미만이면 PARTIAL. [아직 안 들어옴]은 입금 합계에 따라 PENDING 또는 PARTIAL로 되돌리고 confirm_requested_*를 비워요. 입금 행 추가 · 취소와 상태 변경은 같은 트랜잭션.
 
