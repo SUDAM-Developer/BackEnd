@@ -704,7 +704,7 @@ WHERE tutoring_id = ? AND is_recognized = TRUE;
 
 ### 기록 구현 메모 (팀 결정, 위 표보다 우선)
 
-엔티티: `com.sudam.domain.record.entity`의 `SessionRecord` · `SessionProgress`. 저장 API는 `POST /api/v1/tutorings/{tutoringId}/records` (`RecordService.save`).
+엔티티: `com.sudam.domain.record.entity`의 `SessionRecord` · `SessionProgress`. 저장 API는 `POST /api/v1/tutorings/{tutoringId}/records` (`TutoringRecordService.save`), 기록 화면은 `GET /api/v1/tutorings/{tutoringId}/record-form` (`RecordFormService.getRecordForm`, 이 회차 날짜보다 앞선 기록의 진도 · 숙제를 읽음).
 
 - 기록과 진도는 둘 다 회차를 가리키는 단방향 연관관계(`@OneToOne(LAZY)` · `@ManyToOne(LAZY)`)예요. `Session`에는 반대편 매핑을 두지 않아요. 회차 · 기록 · 진도는 서비스가 한 트랜잭션에서 함께 저장해요.
 - `attitude` 컬럼은 P2라 두지 않았어요. 진도는 `textbooks.start_position`과 같은 SMALLINT예요.
