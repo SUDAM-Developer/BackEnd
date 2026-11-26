@@ -101,16 +101,27 @@ public class LessonCalendar {
      * @return 회차. 없는 회차 · 다른 과외의 회차 · 수업 날짜가 아닌 날짜면 빈 값
      */
     public Optional<LessonSlot> findLesson(Tutoring tutoring, LessonRef ref) {
+
+        // 회차의 sessionId가 존재한다면 해당 session을 반환한다.
+        // 다른 과외의 회차면 빈 값. 정규 행은 시각이 비어 있을 수 있어 반복 일정 시각으로 채운다.
         if (ref.isStored()) {
             return sessionRepository.findById(ref.sessionId())
                     .filter(session -> session.getTutoring().getId().equals(tutoring.getId()))
                     .map(this::storedWithScheduleTimes);
         }
+
+        // 저장 전 반복 일정 회차: (scheduleId, originalDate)가 실제 수업 날짜인지 확인한다.
+        // 과외 기간(생성일 ~ 종료일)만 보고 정산 잠금은 보지 않으므로 lockedUntil은 null로 둔다.
         TutoringSpan span = TutoringSpan.of(tutoring, null);
         return tutoringScheduleRepository.findById(ref.scheduleId())
+                // 1. 일정이 이 과외의 것인지 확인한다. 아니면 빈 값.
                 .filter(schedule -> schedule.getTutoring().getId().equals(tutoring.getId()))
+                // 2. 엔티티를 계산용 값(요일 · 시각 · 적용 기간)으로 옮긴다.
                 .map(ScheduleRule::from)
+                // 3. 요일 · 일정 적용 기간 · 과외 기간이 모두 맞아야 수업 날짜다. 아니면 빈 값.
                 .filter(rule -> LessonExpander.occurs(span, rule, ref.originalDate()))
+                // 4. 같은 (일정, 원래 날짜)로 저장된 행(기록 · 휴강 · 시간 변경)이 있으면 그 행을, 없으면 계산된 예정 회차를 돌려준다.
+                //    저장 행에 시각이 없으면(정규 기록) 반복 일정 시각으로 채운다.
                 .map(rule -> sessionRepository.findByScheduleIdAndOriginalDate(rule.scheduleId(), ref.originalDate())
                         .map(LessonSlot::stored)
                         .map(slot -> slot.withTimesIfAbsent(rule.startTime(), rule.endTime()))

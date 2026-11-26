@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-23 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
+> 최종 수정: 2026-11-26 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
 
 ## 공통
 
@@ -28,6 +28,7 @@
 | `USER200_4` | 200 | 프로필이 수정되었습니다. |
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
+| `RECORD200_1` | 200 | 기록 화면 정보를 조회했습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `SCHEDULE200_1` | 200 | 한 달 달력이 성공적으로 조회되었습니다. |
 | `SCHEDULE200_2` | 200 | 그날 일정이 성공적으로 조회되었습니다. |
@@ -185,6 +186,44 @@
 ---
 
 ## 수업 기록
+
+### 회차 기록 화면 조회 — `GET /api/v1/tutorings/{tutoringId}/record-form?scheduleId=&originalDate=` (`200`, `RECORD200_1`)
+
+저장 전 반복 일정 회차의 기록 화면(T-10) 정보. 같은 (`scheduleId`, `originalDate`)로 아래 `POST records`에 저장한다. 저장된 회차(보강 · 시간 변경)를 `sessionId`로 여는 것과 기록 수정은 아직 없다.
+
+| 파라미터 | 필수 | 제약 |
+| --- | --- | --- |
+| `scheduleId` | O | 이 과외의 반복 일정 |
+| `originalDate` | O | `yyyy-MM-dd`, 일정 요일 · 적용 기간 · 과외 기간 안. 미래 날짜도 열 수 있다 (저장 시 `RECORD400_2`) |
+
+```json
+{
+  "sessionId": null, "scheduleId": 31, "originalDate": "2026-09-30",
+  "sessionDate": "2026-09-30", "startTime": "18:00", "endTime": "19:30",
+  "sessionType": "REGULAR", "studentName": "윤서아", "noInCycle": 8,
+  "cycle": { "cycleNo": 1, "recognizedCount": 7, "settlementSessionCount": 8 },
+  "textbooks": [
+    { "textbookId": 11, "name": "수능특강 영어", "progressUnit": "CUSTOM", "customUnitLabel": "강", "lastPosition": 6 },
+    { "textbookId": 12, "name": "Grammar Zone 기본", "progressUnit": "UNIT", "customUnitLabel": null, "lastPosition": 17 }
+  ],
+  "previousHomework": "6강 예습",
+  "record": null
+}
+```
+
+- `noInCycle` · `cycle`: 일정 탭(`daily`) 카드와 같은 계산. 지난 미기록은 '지금 기록하면 될 번호'(진행 중 인정 수 + 1), `recognizedCount`는 이번 회차 제외.
+- `textbooks[]`: 과외 교재 ID 순. `lastPosition` = 이 회차 날짜보다 **앞선** 기록의 마지막 끝 진도, 앞선 기록이 없으면 교재 시작 진도(`start_position`, 기본 0).
+- `previousHomework`: 이 회차 날짜보다 앞선 직전 기록의 `nextHomework`. 직전 기록에 숙제가 없으면 더 이전으로 거슬러 가지 않고 `null`.
+- '앞선' 기준이라 지난 수업을 늦게 기록해도 그 시점의 진도 · 숙제가 나온다.
+- `sessionId` · `record`: 지금은 항상 `null` (`record`는 기록 수정에서 채운다).
+- 이미 정산된 날짜인지는 검사하지 않는다 (저장 API와 같음. 일정 탭은 그런 회차를 만들지 않는다).
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 파라미터 누락 (`result: null`) / 날짜 형식 · 타입 오류 (`result`에 파라미터 메시지) | 400 | `COMMON400` |
+| 일정 요일 · 적용 기간 · 과외 기간 밖 | 400 | `RECORD400_1` |
+| 과외(없음 · 삭제 · 남의 과외) / 일정 없음 | 404 | `RECORD404_1` / `_2` |
+| 같은 일정 · 날짜로 저장된 회차 있음 (기록 · 휴강 · 시간 변경) / 진행 중 사이클 없음 | 409 | `RECORD409_1` / `_2` |
 
 ### 수업 기록 저장 — `POST /api/v1/tutorings/{tutoringId}/records` (`201`, `RECORD201_1`)
 

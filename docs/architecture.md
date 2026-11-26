@@ -48,11 +48,12 @@ com.sudam
 │   │   ├── dto/response                # MonthlyScheduleResponse, DailyScheduleResponse
 │   │   └── exception                   # ScheduleException, code/ScheduleErrorCode · ScheduleSuccessCode
 │   ├── record                          # 수업 기록 · 회차 진도
-│   │   ├── controller / service        # POST /api/v1/tutorings/{tutoringId}/records
+│   │   ├── controller                  # TutoringRecordController: GET .../record-form, POST .../records (과외 아래 하위 자원)
+│   │   ├── service                     # TutoringRecordService(기록 저장 → 정산), RecordFormService(기록 화면, 예정 회차 계산기 LessonCalendar 사용)
 │   │   ├── entity                      # SessionRecord, SessionProgress (둘 다 회차를 가리킴)
 │   │   ├── enums                       # Understanding, HomeworkResult
-│   │   ├── repository
-│   │   ├── dto                         # request/SaveRecordRequest, response/SaveRecordResponse
+│   │   ├── repository                  # TextbookLastPosition: 지난 진도 조회 결과 타입
+│   │   ├── dto                         # request/SaveRecordRequest, response/SaveRecordResponse · RecordFormResponse
 │   │   └── exception                   # RecordException, code/RecordErrorCode · RecordSuccessCode
 │   ├── report                          # 정산 리포트 (요약 · 진도)
 │   │   ├── controller / service        # GET /api/v1/reports/{reportId} (ReportService)
@@ -273,4 +274,4 @@ INSERT INTO terms (code, version, title, is_required, effective_at) VALUES
 - 탈퇴 보강 — 카카오 unlink, 재가입 제한, 타 도메인 연락처 정리.
 - 운영 프로파일 — `application-prod.yaml`. 개발 서버는 `application-dev.yaml`(`ddl-auto: validate` 고정, 쿠키 `Secure`, 도메인 기준 리다이렉트 · CORS 출처)을 쓴다.
 - ERD의 생성 컬럼 + 유일 제약 — Flyway로 추가할 수 있지만 아직 만들지 않았다. 별도 이슈에서 추가하기 전까지 서비스에서 보장한다.
-- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산은 수업 기록 저장이 같은 트랜잭션에서 실행한다 (`RecordService` → `SettlementService.settleIfReached`).
+- 과외 · 참여자 · 교육비 API — 엔티티만 있고 컨트롤러 · 서비스는 아직 없다. 정산은 수업 기록 저장이 같은 트랜잭션에서 실행한다 (`TutoringRecordService` → `SettlementService.settleIfReached`).

@@ -5,11 +5,25 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public interface SessionRecordRepository extends JpaRepository<SessionRecord, Long> {
+
+    // 과외의 기준 날짜보다 앞선 직전 기록의 다음 숙제. 기록이 없거나 숙제가 비어 있으면 빈 값이다.
+    @Query("""
+            select r.nextHomework
+            from SessionRecord r
+            join r.session s
+            where s.tutoring.id = :tutoringId and s.sessionDate < :date
+            order by s.sessionDate desc, s.startTime desc nulls first, s.id desc
+            limit 1
+            """)
+    Optional<String> findPreviousHomework(@Param("tutoringId") Long tutoringId,
+                                          @Param("date") LocalDate date);
 
     // 사이클 인정 회차의 기록. 리포트 통계(숙제 수행률 · 이해도)에 쓴다.
     @Query("""
