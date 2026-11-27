@@ -17,6 +17,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.junit.jupiter.api.BeforeEach;
+import com.sudam.global.idempotency.InMemoryIdempotencyStore;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
@@ -34,6 +37,10 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.mockito.Mockito.times;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -51,13 +58,22 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InvoiceControllerTest {
 
     private static final Long TEACHER_ID = 1L;
+    private static final String KEY = "3f1c2a9e-6b7d-4e21-9a0f-1c2d3e4f5a6b";
     private static final LocalDateTime NOV_15 = LocalDateTime.of(2026, 11, 15, 20, 0);
 
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private InMemoryIdempotencyStore idempotencyStore;
+
     @MockitoBean
     private InvoiceService invoiceService;
+
+    @BeforeEach
+    void clearStore() {
+        idempotencyStore.clear();
+    }
 
     @Test
     @DisplayName("month가 YYYY-MM 형식이 아니면 COMMON400이고 result에 month 메시지가 담긴다")
@@ -145,6 +161,41 @@ class InvoiceControllerTest {
     }
 
     @Test
+    @DisplayName("멱등 키 헤더 없이 입금 확인하면 지금처럼 201이고 멱등 기록을 남기지 않는다 (배포 앱 호환)")
+    void 헤더_없는_입금_확인은_그대로_201() throws Exception {
+        // given
+        givenPaymentConfirmed();
+
+        // when & then
+        mockMvc.perform(payment(null)).andExpect(status().isCreated());
+        mockMvc.perform(payment(null))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotent-Replayed"));
+
+        verify(invoiceService, times(2)).confirmPayment(anyLong(), anyLong(), any(ConfirmPaymentRequest.class));
+        assertThat(idempotencyStore.isEmpty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("같은 멱등 키로 입금 확인을 두 번 보내면 한 번만 처리하고 두 번째는 첫 201 응답을 재현한다")
+    void 같은_키_입금_확인_두_번은_한_번만_처리() throws Exception {
+        // given
+        givenPaymentConfirmed();
+
+        // when
+        mockMvc.perform(payment(KEY)).andExpect(status().isCreated());
+
+        // then
+        mockMvc.perform(payment(KEY))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andExpect(jsonPath("$.code").value("INVOICE201_1"))
+                .andExpect(jsonPath("$.result.paymentId").value(7));
+
+        verify(invoiceService, times(1)).confirmPayment(anyLong(), anyLong(), any(ConfirmPaymentRequest.class));
+    }
+
+    @Test
     @DisplayName("본문 없이 입금 확인하면 금액 · 시각이 빈 요청으로 서비스에 넘긴다")
     void 본문_없는_입금_확인() throws Exception {
         // given
@@ -217,6 +268,18 @@ class InvoiceControllerTest {
                 null, NOV_15, NOV_15, List.of());
     }
 
+    private void givenPaymentConfirmed() {
+        given(invoiceService.confirmPayment(eq(TEACHER_ID), eq(10L), any(ConfirmPaymentRequest.class)))
+                .willReturn(new PaymentConfirmResponse(7L, 120_000, item(InvoiceStatus.PARTIAL, 120_000)));
+    }
+
+    private static MockHttpServletRequestBuilder payment(String idempotencyKey) {
+        MockHttpServletRequestBuilder request = post("/api/v1/invoices/10/payments").with(teacher())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 120000}");
+        return idempotencyKey == null ? request : request.header("Idempotency-Key", idempotencyKey);
+    }
+
     // 운영 principal과 같은 CustomOAuth2User(userId, Role)를 SecurityContext에 넣는다 (security-convention.md).
     private static RequestPostProcessor teacher() {
         CustomOAuth2User principal = new CustomOAuth2User(TEACHER_ID, Role.TEACHER);
@@ -237,6 +300,12 @@ class InvoiceControllerTest {
                     .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                     .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                     .build();
+        }
+
+        // 슬라이스에는 Redis 저장소 빈이 없으므로 같은 계약의 메모리 저장소로 멱등 흐름을 확인한다.
+        @Bean
+        InMemoryIdempotencyStore idempotencyStore() {
+            return new InMemoryIdempotencyStore();
         }
     }
 }
