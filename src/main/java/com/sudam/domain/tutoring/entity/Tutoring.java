@@ -23,9 +23,11 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -41,6 +43,11 @@ import java.util.stream.Collectors;
         indexes = @Index(name = "idx_tutorings_teacher_status", columnList = "teacher_id, status")
 )
 public class Tutoring extends BaseTimeEntity {
+
+    private static final int GRADE_OTHER = 0;
+    private static final int MAX_GRADE_LEVEL = 12;
+    // 한국 학년도는 3월에 시작하므로 1 · 2월은 전년도 학년도다.
+    private static final int SCHOOL_YEAR_START_MONTH = 3;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -127,6 +134,28 @@ public class Tutoring extends BaseTimeEntity {
         return EnumSet.copyOf(subjects).stream()
                 .map(subject -> subject == Subject.OTHER && subjectOther != null ? subjectOther : subject.getName())
                 .collect(Collectors.joining(" · "));
+    }
+
+    /***
+     * 함수 기능: 과목을 과목 순서(enum 순서)대로 돌려준다.
+     * @return 과목 목록 (1개 이상)
+     */
+    public List<Subject> sortedSubjects() {
+        // JSON에서 읽으면 Set 구현과 순서가 보장되지 않아 enum 순서로 다시 정렬한다.
+        return List.copyOf(EnumSet.copyOf(subjects));
+    }
+
+    /***
+     * 함수 기능: 오늘 기준 현재 학년을 구한다. 학년은 매 학년도(3월 시작)마다 하나씩 오른다.
+     * @param today 오늘
+     * @return 0(기타)은 그대로 0, 그 외는 1~12. 고3(12)을 넘으면 12로 고정
+     */
+    public int currentGradeLevel(LocalDate today) {
+        if (gradeLevel == GRADE_OTHER) {
+            return GRADE_OTHER;
+        }
+        int schoolYear = today.getMonthValue() >= SCHOOL_YEAR_START_MONTH ? today.getYear() : today.getYear() - 1;
+        return Math.min(gradeLevel + (schoolYear - gradeSchoolYear), MAX_GRADE_LEVEL);
     }
 
     public boolean isDeleted() {
