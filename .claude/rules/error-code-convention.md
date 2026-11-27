@@ -28,6 +28,7 @@ domain/<도메인>/exception/
     └── <도메인>SuccessCode.java  # implements BaseSuccessCode
 ```
 
+- 도메인에 속하지 않는 `global` 공통 모듈의 코드는 `global/<모듈>/exception/code/`에 둔다 (예: `global/idempotency/exception/code/IdempotencyErrorCode`).
 - 도메인/관심사별 코드는 별도 enum이 `BaseErrorCode` / `BaseSuccessCode`를 구현한다 (예: `domain.auth.exception.code.AuthErrorCode`).
 - **코드 enum은 도메인 자산이다.** 인증 코드도 `global/security`가 아니라 `domain/auth/exception/code/`에 둔다. `global/security`에는 필터·핸들러·유틸·토큰 저장소만 남긴다.
 - 예외: 일반 비즈니스 예외는 `ProjectException`(생성자에 `BaseErrorCode`)**을 상속받는 각 도메인 예외로 변환해서** 던진다. 소셜 로그인 흐름만 `SocialLoginException`(`OAuth2AuthenticationException` 상속, `global/security/oauth2/exception/`)을 쓴다.
