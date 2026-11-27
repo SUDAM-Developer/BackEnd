@@ -57,16 +57,25 @@ public class LessonCalendar {
      * @return 회차 목록. 정렬: 날짜 → 시작 시각(NULL 뒤) → 저장 회차 id → 일정 id
      */
     public List<LessonSlot> lessonsOf(Collection<Tutoring> tutorings, LocalDate from, LocalDate to) {
+        // 과외가 없으면 IN () 쿼리를 날리지 않고 바로 끝낸다.
         if (tutorings.isEmpty()) {
             return List.of();
         }
+        // 입력 순서를 유지한 과외 ID 집합. 아래 쿼리들의 IN 조건으로 쓴다.
         Set<Long> tutoringIds = idsOf(tutorings);
+
+        // 1. 과외별 '정산 잠금 날짜'를 구한다 = 정산 완료(SETTLED) 사이클의 마지막 인정 회차 날짜.
+        //    그 날짜까지는 이미 정산이 끝났으므로 미기록 예정 회차를 새로 만들지 않는다. 정산한 적 없는 과외는 맵에 없다(null).
         Map<Long, LocalDate> lockedUntil = sessionRepository.findLastSettledDates(tutoringIds, CycleStatus.SETTLED)
                 .stream()
                 .collect(Collectors.toMap(TutoringLastSettledDate::tutoringId, TutoringLastSettledDate::lastDate));
+
+        // 2. 과외마다 회차를 만들 수 있는 날짜 범위(TutoringSpan)를 만든다: 과외 생성일 ~ 종료일 + 정산 잠금 날짜.
         List<TutoringSpan> spans = tutorings.stream()
                 .map(tutoring -> TutoringSpan.of(tutoring, lockedUntil.get(tutoring.getId())))
                 .toList();
+
+        // 3. 범위 안에서 반복 일정을 펼치고 저장된 회차로 덮어써 정렬한다.
         return expand(tutoringIds, spans, from, to);
     }
 
@@ -164,13 +173,21 @@ public class LessonCalendar {
                         upcoming.getOrDefault(tutoringId, List.of()), today)));
     }
 
+    // DB에서 계산 재료(반복 일정 · 저장 행)를 읽어 순수 함수 LessonExpander에 넘긴다. 펼치기 규칙은 LessonExpander에만 있다.
     private List<LessonSlot> expand(Set<Long> tutoringIds, List<TutoringSpan> spans, LocalDate from, LocalDate to) {
+        // 1. 적용 기간이 [from, to]와 겹치는 반복 일정만 읽어 계산용 값(요일 · 시각 · 적용 기간)으로 옮긴다.
+        //    일정을 바꾼 과외는 옛 일정과 새 일정이 둘 다 올 수 있고, 날짜별 적용 여부는 LessonExpander가 가린다.
         List<ScheduleRule> rules = tutoringScheduleRepository.findEffectiveIn(tutoringIds, from, to).stream()
                 .map(ScheduleRule::from)
                 .toList();
+
+        // 2. 저장된 회차(기록 · 휴강 · 보강 · 시간 변경)를 읽는다. 실제 날짜나 원래 날짜가 기간 안인 행을 모두 가져온다.
+        //    원래 날짜만 기간 안인 행(다른 날로 옮긴 회차)은 그 원래 날짜의 예정 회차를 지우는 데만 쓰인다.
         List<LessonSlot> stored = sessionRepository.findInPeriod(tutoringIds, from, to).stream()
                 .map(LessonSlot::stored)
                 .toList();
+
+        // 3. 반복 일정을 날짜로 펼치고, 같은 (일정, 원래 날짜)에 저장 행이 있으면 저장 행이 대신 나온다.
         return LessonExpander.expand(spans, rules, stored, from, to);
     }
 
