@@ -91,7 +91,9 @@ com.sudam
     ├── entity/BaseTimeEntity.java      # createdAt / updatedAt 감사
     ├── crypto/AccountNumberConverter   # 계좌번호 AES-256-GCM JPA 변환기
     ├── seed                            # 시연용 가상 데이터 (sudam.seed.enabled = true일 때만 빈 생성). DemoSeedRunner → DemoSeedService(→ DemoSeedResetter: sudam.seed.reset일 때 삭제), DemoIncomeCard · DemoLessonPlan(순수 함수)
-    ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig, ClockConfig(Asia/Seoul Clock 빈 — 서비스는 LocalDateTime.now(clock))
+    ├── config                          # SecurityConfig, JpaConfig, SwaggerConfig, ClockConfig(Asia/Seoul Clock 빈 — 서비스는 LocalDateTime.now(clock)), WebMvcConfig(인터셉터 등록)
+    ├── idempotency                     # @Idempotent POST의 Idempotency-Key 처리: IdempotencyFilter(요청 · 응답 래핑) → IdempotencyInterceptor → RedisIdempotencyStore(idem:{userId}:{key})
+    │   └── exception                   # IdempotencyException, code/IdempotencyErrorCode (IDEMPOTENCY400_1 · 409_1 · 422_1)
     └── security                        # 인증 인프라 (코드 enum은 domain/auth에 둔다)
         ├── filter/JwtAuthenticationFilter
         ├── token/TokenStore            # Redis — rt:{userId}, bl:{jti}
@@ -115,6 +117,7 @@ com.sudam
 | PARTICIPANT | — | 404_1 (학부모 링크) |
 | SHARE | 201_1 | 400_1 ~ 400_2, 404_1, 409_1 |
 | SETTLEMENT | — | 500_1 |
+| IDEMPOTENCY | — | 400_1, 409_1, 422_1 |
 
 ## 요청 처리 흐름
 
@@ -129,6 +132,29 @@ SecurityFilterChain(STATELESS) → Controller(@Valid, 응답 조립) → Service
 - 예외는 어디서 던져도 `GeneralExceptionHandler`가 `ApiResponse.onFailure`로 바꾼다. 컨트롤러에서 에러 응답을 직접 만들지 않는다.
 - `open-in-view: false`라 지연 로딩은 서비스 안에서 끝낸다.
 - 201 Created만 `ResponseEntity`로 감싼다.
+
+### 멱등 POST (`@Idempotent`)
+
+```
+SecurityFilterChain(인증) → IdempotencyFilter
+     Idempotency-Key 헤더 + POST/PUT/PATCH + JSON(또는 Content-Type 없음) + 본문 64KB 이하일 때만
+     본문 캐싱 요청 · ContentCachingResponseWrapper로 감쌈 (그 외는 그대로 통과)
+  → IdempotencyInterceptor.preHandle
+     헤더 없음: @Idempotent(required = false)면 그대로 통과, 필수면 IDEMPOTENCY400_1 / UUID 아님 → IDEMPOTENCY400_1
+     키는 소문자로 정규화. 감싸지 않은 요청: 64KB 초과 · chunked → COMMON413, 그 외 → COMMON415
+     지문 = SHA-256(메서드 + URI(+쿼리) + 본문)
+     idem:{userId}:{key} SET NX(처리 중 + 요청마다 다른 토큰, 2분) 성공 → 컨트롤러 실행
+     실패 → 지문 다름 IDEMPOTENCY422_1 / 처리 중 IDEMPOTENCY409_1 / 완료 → 저장된 상태 · 본문 + Idempotent-Replayed: true
+  → afterCompletion (값이 아직 내 예약일 때만, Lua로 원자적으로)
+     2xx → 완료 응답으로 덮어쓰기(24시간) / 4xx → 키 삭제(같은 키로 재시도 가능)
+     5xx · 처리되지 않은 예외 → 그대로 둠(2분 만료) — 커밋 후 응답 실패의 즉시 재실행 방지
+```
+
+새 POST에 적용할 때는 컨트롤러 메서드에 `@Idempotent`(프론트가 아직 헤더를 보내지 않는 기존 API면 `required = false`)와 Swagger 헤더 `@Parameter`를 붙이고 `docs/api-spec.md`에 필수 · 선택을 적는다.
+
+처리 중 TTL(2분)은 요청 하나가 걸릴 수 있는 최대 시간(청구 행 잠금 대기 — MySQL `innodb_lock_wait_timeout` 기본 50초 포함)보다 길어야 한다. 먼저 만료되면 같은 키의 재시도가 다시 실행된다. 처리 시간이 더 긴 API에 붙일 때는 이 값을 다시 본다.
+
+인터셉터는 저장소를 `ObjectProvider`로 처리 시점에 꺼낸다. 컨트롤러 슬라이스 테스트(`@WebMvcTest`)에는 Redis 저장소 빈이 없어도 되고, `@Idempotent` 엔드포인트를 테스트할 때만 `InMemoryIdempotencyStore` 빈을 넣는다.
 
 ### 소셜 로그인
 
