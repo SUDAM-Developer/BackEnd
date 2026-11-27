@@ -10,7 +10,7 @@ public final class PresetJudge {
     private PresetJudge() {
     }
 
-    // [건너뛰기]는 답을 무시하고 SIMPLE.
+    // [건너뛰기]는 답을 무시하고 SIMPLE. skipped=false인데 답이 null이면 호출자(서비스)가 먼저 검증해야 한다.
     public static PresetType judge(boolean skipped, ParentUpdateFrequency parentAnswer) {
         if (skipped) {
             return PresetType.SIMPLE;

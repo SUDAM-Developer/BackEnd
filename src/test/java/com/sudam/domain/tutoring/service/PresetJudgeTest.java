@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.sudam.domain.tutoring.enums.ParentUpdateFrequency;
 import com.sudam.domain.tutoring.enums.PresetType;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -30,7 +31,7 @@ class PresetJudgeTest {
         assertThat(PresetJudge.judge(true, answer)).isEqualTo(PresetType.SIMPLE);
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     @DisplayName("건너뛰면 답이 null이어도 SIMPLE")
     void 건너뛰면_null이어도_SIMPLE() {
         // given / when / then

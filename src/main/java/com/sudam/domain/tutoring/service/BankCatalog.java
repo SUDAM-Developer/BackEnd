@@ -27,7 +27,7 @@ public final class BankCatalog {
     }
 
     private static String normalize(String name) {
-        String stripped = name.replaceAll("\s+", "");
+        String stripped = name.replaceAll("[\\s\\u00A0]+", "");
         return stripped.endsWith(BANK_SUFFIX)
                 ? stripped.substring(0, stripped.length() - BANK_SUFFIX.length())
                 : stripped;

@@ -11,7 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class BankCatalogTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"국민", "국민은행", " 국 민 은행 "})
+    @ValueSource(strings = {"국민", "국민은행", " 국 민 은행 ", "국민\t은행", "국민\u00A0은행"})
     @DisplayName("은행 이름은 공백과 끝의 '은행'을 무시하고 찾는다")
     void 정규화_후_국민을_찾는다(String input) {
         // given / when
