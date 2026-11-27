@@ -12,4 +12,10 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Idempotent {
+
+    /**
+     * false면 헤더가 없을 때 멱등 처리 없이 그대로 실행한다. 헤더가 있으면 필수 모드와 똑같이 처리한다.
+     * 프론트가 아직 헤더를 보내지 않는 기존 API를 깨지 않고 멱등 처리를 붙일 때 쓴다.
+     */
+    boolean required() default true;
 }

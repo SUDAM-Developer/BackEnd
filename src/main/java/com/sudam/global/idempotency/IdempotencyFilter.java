@@ -5,6 +5,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingResponseWrapper;
@@ -18,6 +20,8 @@ import java.util.Set;
  * 본문을 통째로 메모리에 올리므로 크기를 제한하고, 폼 · 멀티파트는 감싸지 않는다 (원본 스트림을 읽으면 파라미터 파싱이 깨진다).
  * 조건에 맞지 않는 @Idempotent 요청은 인터셉터가 413 / 415로 거절한다.
  */
+// 보안 필터 체인(-100) 뒤에 둔다. 인증 실패 요청의 본문은 메모리에 올릴 필요가 없고, 인터셉터는 인증 주체가 필요하다.
+@Order(Ordered.LOWEST_PRECEDENCE - 10)
 @Component
 public class IdempotencyFilter extends OncePerRequestFilter {
 

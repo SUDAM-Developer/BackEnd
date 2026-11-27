@@ -37,6 +37,10 @@ public class InMemoryIdempotencyStore implements IdempotencyStore {
         records.put(id(userId, key), record);
     }
 
+    public boolean isEmpty() {
+        return records.isEmpty();
+    }
+
     public void clear() {
         records.clear();
     }

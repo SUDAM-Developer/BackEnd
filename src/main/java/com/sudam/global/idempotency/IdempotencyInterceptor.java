@@ -10,7 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -21,6 +21,7 @@ import org.springframework.web.util.WebUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -65,10 +66,16 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        String key = request.getHeader(HEADER);
-        if (key == null || !UUID_PATTERN.matcher(key).matches()) {
+        String rawKey = request.getHeader(HEADER);
+        // 선택 모드: 헤더를 아직 보내지 않는 클라이언트는 멱등 처리 없이 그대로 실행한다.
+        if (rawKey == null && !method.getMethodAnnotation(Idempotent.class).required()) {
+            return true;
+        }
+        if (rawKey == null || !UUID_PATTERN.matcher(rawKey).matches()) {
             throw new IdempotencyException(IdempotencyErrorCode.KEY_INVALID);
         }
+        // UUID는 대소문자를 구분하지 않으므로 소문자로 맞춰 같은 키로 본다.
+        String key = rawKey.toLowerCase(Locale.ROOT);
 
         Long userId = currentUserId();
         String fingerprint = fingerprint(request);
@@ -102,13 +109,13 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
     }
 
     /***
-     * 함수 기능: 이 요청이 예약한 키의 결과를 정리한다. 2xx면 응답을 24시간 저장하고, 그 외(4xx · 5xx · 처리되지 않은 예외)면
-     * 예약을 지워 같은 키로 다시 시도할 수 있게 한다. 저장 · 삭제 모두 키에 아직 내 예약이 남아 있을 때만 반영된다.
+     * 함수 기능: 이 요청이 예약한 키의 결과를 정리한다. 2xx면 응답을 24시간 저장하고, 4xx면 예약을 지워 고친 요청을
+     * 같은 키로 다시 보낼 수 있게 한다. 5xx · 처리되지 않은 예외면 예약을 그대로 두어 처리 중 TTL(2분)에 맡긴다. 저장 · 삭제 모두 키에 아직 내 예약이 남아 있을 때만 반영된다.
      * 참고: 예외 처리기(@RestControllerAdvice)가 처리한 예외는 ex가 null로 오고 응답 상태가 4xx · 5xx로 이미 정해져 있다.
      * 여기서 던진 예외는 스프링이 로그만 남기고 삼키므로 클라이언트 응답에는 영향이 없다.
      * @param request  preHandle에서 남긴 예약 표시를 꺼낼 요청. 표시가 없으면(예약 안 함 · 재현함 · 거절함) 아무것도 하지 않는다
      * @param response IdempotencyFilter가 감싼 응답 (버퍼에 쌓인 본문 바이트를 저장한다)
-     * @param ex       처리되지 않고 올라온 예외. 있으면 실패로 보고 예약을 지운다
+     * @param ex       처리되지 않고 올라온 예외. 있으면 예약을 그대로 둔다
      */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
@@ -121,7 +128,15 @@ public class IdempotencyInterceptor implements HandlerInterceptor {
         ContentCachingResponseWrapper cachingResponse =
                 WebUtils.getNativeResponse(response, ContentCachingResponseWrapper.class);
 
-        if (ex == null && cachingResponse != null && HttpStatus.valueOf(response.getStatus()).is2xxSuccessful()) {
+        HttpStatusCode status = HttpStatusCode.valueOf(response.getStatus());
+
+        // 5xx · 처리되지 않은 예외는 커밋 뒤 응답 단계에서 실패했을 수도 있다. 예약을 바로 풀면 즉시 재시도가 한 번 더
+        // 실행되므로, 처리 중 표시를 그대로 두고 2분 만료에 맡긴다 (그동안 같은 키는 409).
+        if (ex != null || status.is5xxServerError()) {
+            return;
+        }
+
+        if (cachingResponse != null && status.is2xxSuccessful()) {
             store().complete(reservation.userId(), reservation.key(), reservation.record(),
                     IdempotencyRecord.completed(reservation.record().fingerprint(), response.getStatus(),
                             response.getContentType(),
