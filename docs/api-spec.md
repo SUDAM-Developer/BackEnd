@@ -1,6 +1,6 @@
 # API 명세
 
-> 최종 수정: 2026-11-26 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
+> 최종 수정: 2026-11-27 · 규칙: `.claude/rules/api-convention.md`, `.claude/rules/error-code-convention.md`
 
 ## 공통
 
@@ -28,6 +28,7 @@
 | `USER200_4` | 200 | 프로필이 수정되었습니다. |
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
+| `SESSION200_1` | 200 | 오늘 수업 목록이 조회되었습니다. |
 | `RECORD200_1` | 200 | 기록 화면 정보를 조회했습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `SCHEDULE200_1` | 200 | 한 달 달력이 성공적으로 조회되었습니다. |
@@ -182,6 +183,58 @@
 `subjects[].name`은 `OTHER`면 `subjectOther` 값.
 
 **회원 탈퇴** — 논리 삭제(`withdrawn_at`), `email` · `provider_id`를 `NULL`로 파기, 토큰 처리는 로그아웃과 같다. 같은 카카오 계정으로 다시 로그인하면 새 회원. 에러 `USER404_1`.
+
+---
+
+## 수업
+
+홈 화면. 회차는 일정 탭과 같은 공통 예정 회차 계산기(`LessonCalendar`)로 만들어, 같은 날의 daily `sessions`와 회차 · 순서 · 사이클 번호가 같다. 대상은 내 과외 중 수업 중(`ACTIVE`) · 삭제 안 됨.
+
+### 오늘 수업 목록 — `GET /api/v1/sessions/today` (`200`, `SESSION200_1`)
+
+요청 파라미터 없음. 오늘은 서버 날짜.
+
+```json
+{
+  "date": "2026-10-01",
+  "sessions": [
+    {
+      "sessionId": 1042, "scheduleId": 28, "originalDate": "2026-10-01",
+      "tutoringId": 5, "studentName": "김하준", "gradeLevel": 8, "gradeOther": null,
+      "subjects": [ { "subjectCode": "MATH", "subjectName": "수학" } ],
+      "sessionType": "REGULAR", "status": "COMPLETED",
+      "startTime": "15:00", "endTime": "16:30", "isTimeChanged": false,
+      "regularSchedules": [ { "dayOfWeek": 4, "startTime": "15:00", "endTime": "16:30" } ],
+      "cycle": { "sessionNo": 3, "recordedCount": 3, "settlementSessionCount": 4 }
+    },
+    {
+      "sessionId": null, "scheduleId": 31, "originalDate": "2026-10-01",
+      "tutoringId": 7, "studentName": "윤서아", "gradeLevel": 10, "gradeOther": null,
+      "subjects": [ { "subjectCode": "ENGLISH", "subjectName": "영어" }, { "subjectCode": "OTHER", "subjectName": "논술" } ],
+      "sessionType": "REGULAR", "status": "SCHEDULED",
+      "startTime": "18:00", "endTime": "19:30", "isTimeChanged": false,
+      "regularSchedules": [
+        { "dayOfWeek": 1, "startTime": "18:00", "endTime": "19:30" },
+        { "dayOfWeek": 3, "startTime": "18:00", "endTime": "19:30" },
+        { "dayOfWeek": 4, "startTime": "18:00", "endTime": "19:30" }
+      ],
+      "cycle": { "sessionNo": 5, "recordedCount": 4, "settlementSessionCount": 5 }
+    }
+  ]
+}
+```
+
+- `sessions`: 오늘 회차, 시작 시각순. 휴강(`CANCELED`) · 기록 완료(`COMPLETED`)도 포함한다. 없으면 `[]`. 한 과외가 오늘 두 번 수업하면(같은 요일 일정 둘 · 정규 + 보강) 카드도 두 개다.
+- 저장 전 회차는 `sessionId: null`이고 (`scheduleId`, `originalDate`)로 기록 화면 · 기록 저장 API에 보낸다. 보강 · 추가 회차는 `scheduleId` · `originalDate`가 `null`.
+- `gradeLevel`: 현재 학년(1~12 = 초1~고3, 0 = 기타). 등록 학년에 학년도(3월 시작)마다 1씩 더하고 12에서 멈춘다. 기타(0)는 오르지 않는다.
+- `subjects`: 과목 순서(`ENGLISH` → `MATH` → `KOREAN` → `SCIENCE` → `SOCIAL` → `OTHER`). `OTHER`의 `subjectName`은 직접 입력한 과목명, 없으면 `기타`.
+- `regularSchedules`: 그 과외에 오늘 적용 중인 주간 반복 일정 전부, 요일(1 = 월 ~ 7 = 일) → 시작 시각순.
+- `cycle`: daily `cycle`과 같은 규칙 — `sessionNo` = `noInCycle`(기록한 인정 회차는 확정 번호, 미기록은 지금 기록하면 될 번호, 미인정 휴강은 `null`), `recordedCount` = 그 사이클의 인정 회차 수(`recognizedCount`).
+- 아직 고정값: `isTimeChanged` = `false`(시간 변경 컬럼 전).
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 토큰 없음 · 만료 · 무효 | 401 | `COMMON401` |
 
 ---
 

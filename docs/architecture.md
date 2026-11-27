@@ -36,11 +36,13 @@ com.sudam
 │   │   ├── enums                       # ParticipantRole, ParticipantLabel, ReceiveMethod, NotificationConsent
 │   │   └── repository
 │   ├── session                         # 수업 회차
+│   │   ├── controller                  # GET /api/v1/sessions/today (홈 오늘 수업, TodaySessionService)
 │   │   ├── entity/Session.java         # completeRegular = 정규 회차 기록
 │   │   ├── enums                       # SessionType, SessionStatus
 │   │   ├── repository                  # 일정 · 날짜 중복 확인, 사이클 인정 회차의 정렬 조회 · 수 · 첫/마지막 날짜, 날짜 범위 휴강, 계산기용 기간 · 인정 회차 · 정산 날짜 조회
 │   │   └── service
 │   │       ├── SessionCycleReader      # 정산 포트 CycleSessionReader 구현 (MANDATORY)
+│   │       ├── TodaySessionService     # 홈 오늘 수업 목록 (계산기 결과를 카드로 조립)
 │   │       └── LessonCalendar          # 공통 예정 회차 계산기 (LessonExpander 펼치기 · CycleTimeline 사이클 예측, 결과는 LessonSlot)
 │   ├── schedule                        # 일정 탭 조회 (계산기 위의 얇은 조회, 엔티티 없음)
 │   │   ├── controller / service        # GET /api/v1/schedules/monthly · daily (ScheduleService)
