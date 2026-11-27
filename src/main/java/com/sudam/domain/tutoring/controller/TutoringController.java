@@ -11,6 +11,7 @@ import com.sudam.global.security.oauth2.CustomOAuth2User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,8 @@ public class TutoringController {
             description = "선생님이 학생 · 교재 · 일정 · 정산 · 계좌 · 알림 · 초대 정보를 한 번에 보내 과외를 만든다. "
                     + "선불이면 첫 청구서를 함께 발행하고, 참여자별 링크를 돌려준다.")
     @Parameter(name = IdempotencyInterceptor.HEADER, in = ParameterIn.HEADER, required = true,
-            description = "중복 생성을 막는 멱등 키(UUID). 재시도에는 같은 값을 보낸다.")
+            description = "중복 생성을 막는 멱등 키(UUID). 재시도에는 같은 값을 보낸다.",
+            schema = @Schema(type = "string", format = "uuid"))
     @Idempotent
     @PostMapping
     public ResponseEntity<ApiResponse<TutoringCreateResponse>> create(@AuthenticationPrincipal CustomOAuth2User principal,

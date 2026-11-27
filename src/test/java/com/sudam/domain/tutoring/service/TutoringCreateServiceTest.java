@@ -105,7 +105,7 @@ class TutoringCreateServiceTest {
                 textbookRepository, policyRepository, settingRepository, cycleOpener, participantInviter,
                 firstInvoiceIssuer, lessonCalendar, shareLinkFactory, CLOCK);
 
-        given(teacherProfileRepository.findById(1L)).willReturn(Optional.of(teacher));
+        given(teacherProfileRepository.findByIdForUpdate(1L)).willReturn(Optional.of(teacher));
         given(teacher.markFirstTutoringCreated(any())).willReturn(true);
         willAnswer(inv -> {
             Tutoring tutoring = inv.getArgument(0);
@@ -274,7 +274,7 @@ class TutoringCreateServiceTest {
     @Test
     @DisplayName("프로필이 없으면 TEACHER_PROFILE_NOT_FOUND이고 저장하지 않는다")
     void 프로필_없음() {
-        given(teacherProfileRepository.findById(1L)).willReturn(Optional.empty());
+        given(teacherProfileRepository.findByIdForUpdate(1L)).willReturn(Optional.empty());
 
         assertRejected(request(), TutoringErrorCode.TEACHER_PROFILE_NOT_FOUND);
     }
@@ -344,6 +344,22 @@ class TutoringCreateServiceTest {
         assertThat(policy.getAllValues().get(0).getBankCode()).isEqualTo("004");
         assertThat(policy.getAllValues().get(1).getBankCode()).isNull();
         assertThat(policy.getAllValues().get(1).getBankName()).isEqualTo("KB");
+    }
+
+    @Test
+    @DisplayName("은행 이름 앞뒤 공백은 떼고 저장하며 코드도 그 이름으로 찾는다")
+    void 은행_이름_공백_제거() {
+        // given / when
+        service.create(1L, request(f -> {
+            f.account = new Account(" 국민은행 ", "123456-01-401492", "한서윤");
+            return f;
+        }));
+
+        // then
+        ArgumentCaptor<TutoringPolicy> policy = ArgumentCaptor.forClass(TutoringPolicy.class);
+        verify(policyRepository).save(policy.capture());
+        assertThat(policy.getValue().getBankName()).isEqualTo("국민은행");
+        assertThat(policy.getValue().getBankCode()).isEqualTo("004");
     }
 
     @Test

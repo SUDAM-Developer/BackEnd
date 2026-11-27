@@ -138,6 +138,8 @@ public class DemoSeedService {
             createIncomeTutoring(teacher, card, seq++, now);
         }
         DemoTutoring demo = createDemoTutoring(teacher, seq, now);
+        // 과외가 있는 선생님은 첫 과외 생성 시각도 있어야 도달 가능한 상태다.
+        teacher.markFirstTutoringCreated(now);
 
         return DemoSeedResult.created(teacherUser.getId(), teacherUser.getRole(), demo.tutoring().getId(),
                 demo.schedules().get(today.getDayOfWeek()).getId(), today);

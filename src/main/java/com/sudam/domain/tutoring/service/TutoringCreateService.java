@@ -89,7 +89,8 @@ public class TutoringCreateService {
         LocalDateTime now = LocalDateTime.now(clock);
         LocalDate today = now.toLocalDate();
 
-        TeacherProfile teacher = teacherProfileRepository.findById(teacherId)
+        // 같은 선생님의 첫 과외가 동시에 만들어져 isFirstTutoring이 둘 다 true가 되거나 교착되지 않도록 프로필을 먼저 잠근다 (잠금 순서: 프로필 → 과외).
+        TeacherProfile teacher = teacherProfileRepository.findByIdForUpdate(teacherId)
                 .orElseThrow(() -> new TutoringException(TutoringErrorCode.TEACHER_PROFILE_NOT_FOUND));
 
         Tutoring saved = tutoringRepository.save(buildTutoring(teacher, request, today));
@@ -253,7 +254,8 @@ public class TutoringCreateService {
         TutoringCreateRequest.Policy policy = request.policy();
         TutoringCreateRequest.Account account = request.account();
         // 목록에 없는 은행은 bankCode NULL, 입력한 이름은 그대로 둔다.
-        String bankCode = BankCatalog.find(account.bankName()).map(Bank::getCode).orElse(null);
+        String bankName = account.bankName().strip();
+        String bankCode = BankCatalog.find(bankName).map(Bank::getCode).orElse(null);
         return TutoringPolicy.builder()
                 .tutoring(tutoring)
                 .effectiveCycleNo(1)
@@ -261,7 +263,7 @@ public class TutoringCreateService {
                 .paymentTiming(policy.paymentTiming())
                 .tuitionFee(policy.tuitionFee())
                 .bankCode(bankCode)
-                .bankName(account.bankName())
+                .bankName(bankName)
                 .accountNumber(account.accountNumber())
                 .accountHolder(account.accountHolder())
                 .build();

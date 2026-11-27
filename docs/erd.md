@@ -172,7 +172,7 @@ erDiagram
 | `subjects` | JSON | NOT NULL | 담당 과목 복수 선택 (1.1.4). 과목 코드 배열 `["ENGLISH","MATH"]` |
 | `subject_other` | VARCHAR(20) | NULL | subjects에 OTHER가 있을 때 직접 입력한 과목명 |
 | `onboarding_stage` | ENUM(‘PREPARING’,‘TEACHING’) | NOT NULL | 가입 마지막 단계 선택 (1.1.5). 첫 과외 준비 / 이미 과외 중 |
-| `first_tutoring_created_at` | DATETIME | NULL | 처음 과외를 만든 시각. 탭 잠금 해제 기준 (11.1.2). 과외를 모두 종료 · 삭제해도 지우지 않음. 구현: V2 마이그레이션(`datetime(6)`)으로 추가, 첫 과외 생성 때 비어 있을 때만 기록 |
+| `first_tutoring_created_at` | DATETIME | NULL | 처음 과외를 만든 시각. 탭 잠금 해제 기준 (11.1.2). 과외를 모두 종료 · 삭제해도 지우지 않음. 구현: V2 마이그레이션(`datetime(6)`)으로 추가하고 기존 선생님은 가장 이른 과외 생성 시각(삭제 포함)으로 채움, 첫 과외 생성 때 비어 있을 때만 기록 |
 | `intro_unlocked_at` | DATETIME | NULL | 소개서 전문 열림 = 묶음 결제 승인 시각 (11.5.4) |
 | `prep_card_hidden_at` | DATETIME | NULL | 준비 카드 ✕ 시각 (11.1.1). 4/4 완료 전에는 숨길 수 없음(앱 검증) |
 | `created_at / updated_at` | DATETIME | NOT NULL |  |

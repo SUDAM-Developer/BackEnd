@@ -26,6 +26,7 @@ import com.sudam.domain.tutoring.repository.TutoringScheduleRepository;
 import com.sudam.domain.tutoring.repository.TutoringSettingRepository;
 import com.sudam.domain.user.entity.User;
 import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.entity.TeacherProfile;
 import com.sudam.domain.user.repository.TeacherProfileRepository;
 import com.sudam.domain.user.repository.TermsRepository;
 import com.sudam.domain.user.repository.UserRepository;
@@ -284,6 +285,20 @@ class DemoSeedServiceTest {
                 .min(Comparator.naturalOrder())
                 .orElseThrow();
         assertThat(createdAtByStudent).containsEntry(DemoLessonPlan.STUDENT_NAME, demoFirstDate.atStartOfDay());
+    }
+
+    @Test
+    @DisplayName("과외를 만든 시드 선생님은 첫 과외 생성 시각이 기록된다")
+    void 시드_선생님_첫_과외_시각_기록() {
+        // given
+        seedAll();
+        ArgumentCaptor<TeacherProfile> profile = ArgumentCaptor.forClass(TeacherProfile.class);
+
+        // when
+        verify(teacherProfileRepository).save(profile.capture());
+
+        // then
+        assertThat(profile.getValue().getFirstTutoringCreatedAt()).isEqualTo(NOW);
     }
 
     /***

@@ -8,6 +8,7 @@ import com.sudam.domain.user.enums.Subject;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -69,7 +70,7 @@ public record TutoringCreateRequest(
     }
 
     public record Student(
-            @NotNull(message = "학생 이름을 입력해 주세요.")
+            @NotBlank(message = "학생 이름을 입력해 주세요.")
             @Size(min = 1, max = 10, message = "학생 이름은 1~10자로 입력해 주세요.")
             String name,
 
@@ -91,7 +92,7 @@ public record TutoringCreateRequest(
     }
 
     public record TextbookItem(
-            @NotNull(message = "교재 이름을 입력해 주세요.")
+            @NotBlank(message = "교재 이름을 입력해 주세요.")
             @Size(min = 1, max = 20, message = "교재 이름은 1~20자로 입력해 주세요.")
             String name,
 
@@ -139,7 +140,7 @@ public record TutoringCreateRequest(
     }
 
     public record Account(
-            @NotNull(message = "은행을 입력해 주세요.")
+            @NotBlank(message = "은행을 입력해 주세요.")
             @Size(min = 1, max = 20, message = "은행 이름은 1~20자로 입력해 주세요.")
             String bankName,
 
@@ -148,7 +149,7 @@ public record TutoringCreateRequest(
             @Pattern(regexp = "^(?=(?:\\D*\\d){10,14}\\D*$)[0-9-]+$", message = "계좌번호를 확인해 주세요.")
             String accountNumber,
 
-            @NotNull(message = "예금주를 입력해 주세요.")
+            @NotBlank(message = "예금주를 입력해 주세요.")
             @Size(min = 1, max = 20, message = "예금주는 1~20자로 입력해 주세요.")
             String accountHolder
     ) {

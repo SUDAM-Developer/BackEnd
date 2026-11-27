@@ -1,5 +1,6 @@
 package com.sudam.domain.tutoring.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.participant.enums.ParticipantRole;
@@ -25,6 +26,7 @@ public record TutoringCreateResponse(
     public record FirstLesson(
             LocalDate date,
             int dayOfWeek,
+            @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "HH:mm")
             LocalTime startTime
     ) {
     }

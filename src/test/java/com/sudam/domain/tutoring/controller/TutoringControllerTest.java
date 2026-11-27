@@ -82,6 +82,7 @@ class TutoringControllerTest {
                 .andExpect(jsonPath("$.code").value("TUTORING201_1"))
                 .andExpect(jsonPath("$.result.tutoringId").value(5))
                 .andExpect(jsonPath("$.result.isFirstTutoring").value(true))
+                .andExpect(jsonPath("$.result.firstLesson.startTime").value("16:00"))
                 .andExpect(jsonPath("$.result.firstInvoice.accountLast4").value("6789"));
     }
 
@@ -139,6 +140,17 @@ class TutoringControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("COMMON400"))
                 .andExpect(jsonPath("$.result['account.accountNumber']").value("계좌번호를 확인해 주세요."));
+
+        verifyNoInteractions(tutoringCreateService);
+    }
+
+    @Test
+    @DisplayName("예금주가 공백뿐이면 COMMON400이고 account.accountHolder 메시지가 담긴다")
+    void 예금주_공백_검증_실패() throws Exception {
+        mockMvc.perform(request(body(VALID_PARENTS, "110123456789").replace("\"Kim\"", "\"   \"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("COMMON400"))
+                .andExpect(jsonPath("$.result['account.accountHolder']").value("예금주를 입력해 주세요."));
 
         verifyNoInteractions(tutoringCreateService);
     }
