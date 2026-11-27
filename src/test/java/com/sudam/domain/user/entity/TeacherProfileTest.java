@@ -5,6 +5,7 @@ import com.sudam.domain.user.enums.Subject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,5 +42,36 @@ class TeacherProfileTest {
         assertThat(profile.getName()).isEqualTo("김민준");
         assertThat(profile.getSubjects()).containsExactly(Subject.MATH);
         assertThat(profile.getSubjectOther()).isNull();
+    }
+
+    @Test
+    @DisplayName("첫 과외 생성 시각은 처음 한 번만 기록되고 true를 돌려준다")
+    void 첫_과외_생성_시각_최초_기록() {
+        // given
+        TeacherProfile profile = TeacherProfile.create(user, "한서윤", List.of(Subject.MATH), null);
+        LocalDateTime at = LocalDateTime.of(2026, 3, 2, 10, 0);
+
+        // when
+        boolean first = profile.markFirstTutoringCreated(at);
+
+        // then
+        assertThat(first).isTrue();
+        assertThat(profile.getFirstTutoringCreatedAt()).isEqualTo(at);
+    }
+
+    @Test
+    @DisplayName("이미 기록된 뒤에는 값을 유지하고 false를 돌려준다")
+    void 첫_과외_생성_시각_재기록_안함() {
+        // given
+        TeacherProfile profile = TeacherProfile.create(user, "한서윤", List.of(Subject.MATH), null);
+        LocalDateTime firstAt = LocalDateTime.of(2026, 3, 2, 10, 0);
+        profile.markFirstTutoringCreated(firstAt);
+
+        // when
+        boolean second = profile.markFirstTutoringCreated(firstAt.plusDays(1));
+
+        // then
+        assertThat(second).isFalse();
+        assertThat(profile.getFirstTutoringCreatedAt()).isEqualTo(firstAt);
     }
 }

@@ -28,4 +28,14 @@ class ShareLinkFactoryTest {
         // when & then
         assertThat(factory.reportUrl("t", 1L)).isEqualTo("https://sudam.app/l/t/reports/1");
     }
+
+    @Test
+    @DisplayName("초대 링크는 /l/{token}이고 주소 끝 '/'가 있어도 '//'가 생기지 않는다")
+    void 초대_URL() {
+        // given
+        ShareLinkFactory factory = new ShareLinkFactory("https://sudam.app/");
+
+        // when & then
+        assertThat(factory.inviteUrl("abc")).isEqualTo("https://sudam.app/l/abc");
+    }
 }
