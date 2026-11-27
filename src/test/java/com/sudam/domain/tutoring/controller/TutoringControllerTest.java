@@ -9,6 +9,7 @@ import com.sudam.domain.tutoring.service.TutoringCreateService;
 import com.sudam.domain.user.enums.Role;
 import com.sudam.global.idempotency.InMemoryIdempotencyStore;
 import com.sudam.global.security.oauth2.CustomOAuth2User;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +36,12 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,13 +52,22 @@ class TutoringControllerTest {
 
     private static final Long TEACHER_ID = 1L;
     private static final String URL = "/api/v1/tutorings";
+    private static final String KEY = "11111111-1111-4111-8111-111111111111";
     private static final String VALID_PARENTS = "[{\"phone\": \"010-1234-5678\"}]";
 
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private InMemoryIdempotencyStore idempotencyStore;
+
     @MockitoBean
     private TutoringCreateService tutoringCreateService;
+
+    @BeforeEach
+    void clearStore() {
+        idempotencyStore.clear();
+    }
 
     @Test
     @DisplayName("정상 요청은 201 · TUTORING201_1과 tutoringId · isFirstTutoring · firstInvoice를 돌려준다")
@@ -70,6 +83,37 @@ class TutoringControllerTest {
                 .andExpect(jsonPath("$.result.tutoringId").value(5))
                 .andExpect(jsonPath("$.result.isFirstTutoring").value(true))
                 .andExpect(jsonPath("$.result.firstInvoice.accountLast4").value("6789"));
+    }
+
+    @Test
+    @DisplayName("멱등 키 헤더가 없으면 400 · IDEMPOTENCY400_1이고 서비스를 부르지 않는다")
+    void 멱등_키_없으면_400() throws Exception {
+        mockMvc.perform(post(URL).with(teacher()).contentType(MediaType.APPLICATION_JSON)
+                        .content(body(VALID_PARENTS, "110123456789")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.isSuccess").value(false))
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY400_1"));
+
+        verifyNoInteractions(tutoringCreateService);
+    }
+
+    @Test
+    @DisplayName("같은 멱등 키 · 같은 본문으로 두 번 보내면 한 번만 만들고 두 번째는 첫 201 응답을 재현한다")
+    void 같은_키_두_번은_한_번만_생성() throws Exception {
+        // given
+        given(tutoringCreateService.create(eq(TEACHER_ID), any(TutoringCreateRequest.class))).willReturn(response());
+
+        // when
+        mockMvc.perform(request(body(VALID_PARENTS, "110123456789"))).andExpect(status().isCreated());
+
+        // then
+        mockMvc.perform(request(body(VALID_PARENTS, "110123456789")))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andExpect(jsonPath("$.code").value("TUTORING201_1"))
+                .andExpect(jsonPath("$.result.tutoringId").value(5));
+
+        verify(tutoringCreateService, times(1)).create(eq(TEACHER_ID), any(TutoringCreateRequest.class));
     }
 
     @Test
@@ -121,7 +165,8 @@ class TutoringControllerTest {
     }
 
     private static MockHttpServletRequestBuilder request(String json) {
-        return post(URL).with(teacher()).contentType(MediaType.APPLICATION_JSON).content(json);
+        return post(URL).with(teacher()).header("Idempotency-Key", KEY)
+                .contentType(MediaType.APPLICATION_JSON).content(json);
     }
 
     private static String body(String parentsJson, String accountNumber) {

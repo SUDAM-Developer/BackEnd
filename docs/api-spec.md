@@ -106,6 +106,11 @@
 - 4xx 응답은 저장하지 않아 고친 요청을 같은 키로 다시 보낼 수 있다.
 - 5xx 응답이면 처리 중 표시를 **2분** 유지해, 그동안 같은 키는 `IDEMPOTENCY409_1`이다. 저장은 끝났는데 응답만 실패한 경우의 즉시 재실행을 막기 위해서다. 2분이 지나 같은 키로 보내면 다시 실행된다.
 
+적용 API
+
+- `POST /api/v1/tutorings` (필수)
+- `POST /api/v1/invoices/{invoiceId}/payments` (선택)
+
 | 상황 | HTTP | code |
 | --- | --- | --- |
 | (필수) 헤더 없음 · UUID 형식 아님 | 400 | `IDEMPOTENCY400_1` |
