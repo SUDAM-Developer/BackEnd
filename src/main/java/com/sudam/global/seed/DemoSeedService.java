@@ -6,6 +6,7 @@ import com.sudam.domain.invoice.repository.InvoiceRepository;
 import com.sudam.domain.participant.entity.Participant;
 import com.sudam.domain.participant.enums.ParticipantLabel;
 import com.sudam.domain.participant.repository.ParticipantRepository;
+import com.sudam.domain.participant.service.LinkTokenGenerator;
 import com.sudam.domain.record.entity.SessionProgress;
 import com.sudam.domain.record.entity.SessionRecord;
 import com.sudam.domain.record.repository.SessionProgressRepository;
@@ -41,18 +42,17 @@ import com.sudam.domain.user.repository.TeacherProfileRepository;
 import com.sudam.domain.user.repository.TermsRepository;
 import com.sudam.domain.user.repository.UserRepository;
 import com.sudam.domain.user.repository.UserTermsAgreementRepository;
+import com.sudam.global.util.SchoolYear;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.Base64;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
@@ -79,7 +79,6 @@ public class DemoSeedService {
     private static final String FAKE_PHONE_PREFIX = "010000000"; // + 두 자리 = 010-0000-00xx
     private static final String FAKE_ACCOUNT_PREFIX = "000000-00-0000"; // + 두 자리
     private static final int LESSON_MINUTES = 90;
-    private static final int LINK_TOKEN_BYTES = 32;
     // 수입 화면용 과외는 사이클 1을 5주 전에 열고 1주 전에 정산했다고 둔다 (화면에는 날짜가 드러나지 않음).
     private static final int INCOME_CYCLE_START_WEEKS_AGO = 5;
     private static final int INCOME_CYCLE_SETTLED_DAYS_AGO = 7;
@@ -104,9 +103,8 @@ public class DemoSeedService {
     private final SettlementReportViewRepository settlementReportViewRepository;
     private final DemoSeedResetter demoSeedResetter;
     private final DemoTutoringBackdater demoTutoringBackdater;
+    private final LinkTokenGenerator linkTokenGenerator;
     private final Clock clock;
-
-    private final SecureRandom secureRandom = new SecureRandom();
 
     /***
      * 함수 기능: 시드 선생님 · 온보딩(프로필 · 약관) · 과외 5개를 한 트랜잭션에서 만든다. 중간에 실패하면 전부 롤백된다.
@@ -234,7 +232,7 @@ public class DemoSeedService {
                 .subjects(List.of(Subject.ENGLISH))
                 .studentName(studentName)
                 .gradeLevel(gradeLevel)
-                .gradeSchoolYear(DemoLessonPlan.schoolYear(now.toLocalDate()))
+                .gradeSchoolYear(SchoolYear.of(now.toLocalDate()))
                 .build());
         // 일정 시작일보다 늦게 만든 과외는 실제로 생길 수 없어서 생성 시각을 일정 시작일로 당긴다.
         demoTutoringBackdater.backdate(tutoring, effectiveFrom.atStartOfDay());
@@ -279,17 +277,10 @@ public class DemoSeedService {
 
         Participant parent = Participant.createParent(tutoring, ParticipantLabel.MOTHER,
                 FAKE_PHONE_PREFIX + twoDigits(seq));
-        parent.issueLinkToken(newLinkToken(), now);
+        parent.issueLinkToken(linkTokenGenerator.generate(), now);
         participantRepository.save(parent);
 
         return new DemoTutoring(tutoring, Map.copyOf(schedules), textbook, policy, parent);
-    }
-
-    // ERD 공통 규칙: SecureRandom 32바이트를 URL 안전 문자열로.
-    private String newLinkToken() {
-        byte[] bytes = new byte[LINK_TOKEN_BYTES];
-        secureRandom.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private static String twoDigits(int seq) {

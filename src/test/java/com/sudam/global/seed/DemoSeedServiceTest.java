@@ -6,6 +6,7 @@ import com.sudam.domain.cycle.repository.CycleRepository;
 import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.repository.InvoiceRepository;
 import com.sudam.domain.participant.repository.ParticipantRepository;
+import com.sudam.domain.participant.service.LinkTokenGenerator;
 import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.report.entity.SettlementReport;
@@ -36,6 +37,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -96,6 +98,7 @@ class DemoSeedServiceTest {
     @Mock private DemoSeedResetter demoSeedResetter;
     @Mock private DemoTutoringBackdater demoTutoringBackdater;
     @Mock private Clock clock;
+    @Spy private LinkTokenGenerator linkTokenGenerator = new LinkTokenGenerator();
 
     @InjectMocks
     private DemoSeedService demoSeedService;
