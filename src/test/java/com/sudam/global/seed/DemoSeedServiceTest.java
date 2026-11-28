@@ -6,6 +6,7 @@ import com.sudam.domain.cycle.repository.CycleRepository;
 import com.sudam.domain.invoice.entity.Invoice;
 import com.sudam.domain.invoice.repository.InvoiceRepository;
 import com.sudam.domain.participant.repository.ParticipantRepository;
+import com.sudam.domain.participant.service.LinkTokenGenerator;
 import com.sudam.domain.record.repository.SessionProgressRepository;
 import com.sudam.domain.record.repository.SessionRecordRepository;
 import com.sudam.domain.report.entity.SettlementReport;
@@ -25,6 +26,7 @@ import com.sudam.domain.tutoring.repository.TutoringScheduleRepository;
 import com.sudam.domain.tutoring.repository.TutoringSettingRepository;
 import com.sudam.domain.user.entity.User;
 import com.sudam.domain.user.enums.Provider;
+import com.sudam.domain.user.entity.TeacherProfile;
 import com.sudam.domain.user.repository.TeacherProfileRepository;
 import com.sudam.domain.user.repository.TermsRepository;
 import com.sudam.domain.user.repository.UserRepository;
@@ -36,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -96,6 +99,7 @@ class DemoSeedServiceTest {
     @Mock private DemoSeedResetter demoSeedResetter;
     @Mock private DemoTutoringBackdater demoTutoringBackdater;
     @Mock private Clock clock;
+    @Spy private LinkTokenGenerator linkTokenGenerator = new LinkTokenGenerator();
 
     @InjectMocks
     private DemoSeedService demoSeedService;
@@ -281,6 +285,20 @@ class DemoSeedServiceTest {
                 .min(Comparator.naturalOrder())
                 .orElseThrow();
         assertThat(createdAtByStudent).containsEntry(DemoLessonPlan.STUDENT_NAME, demoFirstDate.atStartOfDay());
+    }
+
+    @Test
+    @DisplayName("과외를 만든 시드 선생님은 첫 과외 생성 시각이 기록된다")
+    void 시드_선생님_첫_과외_시각_기록() {
+        // given
+        seedAll();
+        ArgumentCaptor<TeacherProfile> profile = ArgumentCaptor.forClass(TeacherProfile.class);
+
+        // when
+        verify(teacherProfileRepository).save(profile.capture());
+
+        // then
+        assertThat(profile.getValue().getFirstTutoringCreatedAt()).isEqualTo(NOW);
     }
 
     /***

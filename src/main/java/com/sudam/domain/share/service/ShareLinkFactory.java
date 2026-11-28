@@ -37,6 +37,15 @@ public class ShareLinkFactory {
         return linkRoot(linkToken) + "/invoices/" + invoiceId;
     }
 
+    /***
+     * 함수 기능: 과외 초대 링크(참여자 링크 루트) URL을 만든다.
+     * @param linkToken 참여자 링크 토큰
+     * @return {base}/l/{token}
+     */
+    public String inviteUrl(String linkToken) {
+        return linkRoot(linkToken);
+    }
+
     private String linkRoot(String linkToken) {
         return baseUrl + "/l/" + linkToken;
     }

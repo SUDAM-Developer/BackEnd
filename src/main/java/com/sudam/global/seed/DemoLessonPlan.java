@@ -100,15 +100,6 @@ final class DemoLessonPlan {
         return List.copyOf(dates);
     }
 
-    /***
-     * 함수 기능: 학년도를 구한다. 한국 학년도는 3월에 시작하므로 1 · 2월은 전년도다.
-     * @param today 실행일
-     * @return 학년도
-     */
-    static int schoolYear(LocalDate today) {
-        return today.getMonthValue() >= 3 ? today.getYear() : today.getYear() - 1;
-    }
-
     // n번째(0부터) 회차의 진도 시작 단원. 회차마다 2단원씩 앞으로 간다 (1~2, 3~4, ...).
     static int progressStart(int index) {
         return index * UNITS_PER_SESSION + 1;

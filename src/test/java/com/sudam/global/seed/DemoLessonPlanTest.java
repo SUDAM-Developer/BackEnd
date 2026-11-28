@@ -91,12 +91,4 @@ class DemoLessonPlanTest {
                 .isEqualTo(DemoLessonPlan.SETTLEMENT_SESSION_COUNT - 1);
         assertThat(DemoLessonPlan.NOTES.getFirst().previousHomeworkResult()).isNull();
     }
-
-    @ParameterizedTest(name = "{0} → {1}")
-    @CsvSource({"2026-11-14, 2026", "2027-02-28, 2026", "2027-03-01, 2027"})
-    @DisplayName("학년도는 3월에 바뀐다")
-    void 학년도(LocalDate today, int expected) {
-        // when & then
-        assertThat(DemoLessonPlan.schoolYear(today)).isEqualTo(expected);
-    }
 }

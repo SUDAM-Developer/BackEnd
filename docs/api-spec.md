@@ -28,6 +28,7 @@
 | `USER200_4` | 200 | 프로필이 수정되었습니다. |
 | `USER201_1` | 201 | 약관 동의가 저장되었습니다. |
 | `USER201_2` | 201 | 프로필이 등록되었습니다. |
+| `TUTORING201_1` | 201 | 과외가 만들어졌습니다. |
 | `RECORD200_1` | 200 | 기록 화면 정보를 조회했습니다. |
 | `RECORD201_1` | 201 | 수업 기록을 저장했습니다. |
 | `SCHEDULE200_1` | 200 | 한 달 달력이 성공적으로 조회되었습니다. |
@@ -65,6 +66,12 @@
 | `USER404_1` | 404 | 해당 회원을 찾을 수 없습니다. |
 | `USER404_2` | 404 | 프로필이 등록되지 않았습니다. |
 | `USER409_1` | 409 | 이미 등록된 프로필입니다. |
+| `TUTORING400_1` | 400 | 같은 요일 일정이 두 번 들어갔습니다. |
+| `TUTORING400_2` | 400 | 수업 시간을 확인해 주세요. |
+| `TUTORING400_3` | 400 | 같은 번호가 두 번 들어갔습니다. |
+| `TUTORING400_4` | 400 | 아직 지원하지 않는 항목입니다. |
+| `TUTORING400_5` | 400 | 입력값을 확인해 주세요. |
+| `TUTORING404_1` | 404 | 선생님 프로필을 찾을 수 없습니다. |
 | `RECORD400_1` | 400 | 수업 일정에 없는 날짜입니다. |
 | `RECORD400_2` | 400 | 아직 하지 않은 수업은 기록할 수 없습니다. |
 | `RECORD400_3` | 400 | 끝 진도는 시작 진도보다 앞설 수 없습니다. |
@@ -105,6 +112,11 @@
 - 선택인 API는 헤더가 없으면 멱등 처리 없이 그대로 실행한다. 헤더가 있는데 UUID가 아니면 선택이어도 `IDEMPOTENCY400_1`.
 - 4xx 응답은 저장하지 않아 고친 요청을 같은 키로 다시 보낼 수 있다.
 - 5xx 응답이면 처리 중 표시를 **2분** 유지해, 그동안 같은 키는 `IDEMPOTENCY409_1`이다. 저장은 끝났는데 응답만 실패한 경우의 즉시 재실행을 막기 위해서다. 2분이 지나 같은 키로 보내면 다시 실행된다.
+
+적용 API
+
+- `POST /api/v1/tutorings` (필수)
+- `POST /api/v1/invoices/{invoiceId}/payments` (선택)
 
 | 상황 | HTTP | code |
 | --- | --- | --- |
@@ -202,6 +214,116 @@
 `subjects[].name`은 `OTHER`면 `subjectOther` 값.
 
 **회원 탈퇴** — 논리 삭제(`withdrawn_at`), `email` · `provider_id`를 `NULL`로 파기, 토큰 처리는 로그아웃과 같다. 같은 카카오 계정으로 다시 로그인하면 새 회원. 에러 `USER404_1`.
+
+---
+
+## 과외
+
+### 과외 만들기 — `POST /api/v1/tutorings` (`201`, `TUTORING201_1`)
+
+선생님이 학생 · 교재 · 일정 · 정산 · 계좌 · 알림 · 초대 정보를 한 번에 보내 과외를 만든다. 과외 · 일정 · 교재 · 정산 정책 · 알림 설정 · 사이클 1 · 참여자 · (선불이면) 첫 청구를 **한 트랜잭션**으로 만들고, 실패하면 전부 롤백한다. 요청 헤더 `Idempotency-Key`(UUID)가 **필수**다 (공통 '멱등 키' 절 참고). 구독 검사는 아직 없어 과외를 몇 개든 만들 수 있다.
+
+| 요청 필드 | 필수 | 제약 |
+| --- | --- | --- |
+| `preset.skipped` | O | boolean. `true`면 운영 방식 답을 무시한다 |
+| `preset.parentUpdateAnswer` | 조건 | `EVERY_SESSION` / `AT_SETTLEMENT` / `NONE`. `skipped`가 `false`면 필수 |
+| `student.name` | O | 1~10자 |
+| `student.gradeLevel` | O | 0~12 (0 = 기타) |
+| `student.gradeOther` | 조건 | 10자 이내. `gradeLevel`이 0이면 공백 아닌 값 필수, 아니면 저장하지 않는다 |
+| `student.subjects[]` | O | 1개 이상, `ENGLISH` / `MATH` / `KOREAN` / `SCIENCE` / `SOCIAL` / `OTHER`, 중복 불가 |
+| `student.subjectOther` | 조건 | 10자 이내. `subjects`에 `OTHER`가 있으면 공백 아닌 값 필수, 아니면 저장하지 않는다 |
+| `textbooks[]` | O | 1~5권 |
+| `textbooks[].name` / `progressUnit` | O | 1~20자 / `ProgressUnit` enum |
+| `textbooks[].customUnitLabel` | 조건 | 5자 이내. `progressUnit`이 `CUSTOM`이면 공백 아닌 값 필수, 아니면 저장하지 않는다 |
+| `textbooks[].startPosition` | X | 0 이상. 없으면 0 |
+| `schedules[]` | O | 1개 이상. `dayOfWeek` 중복 불가 |
+| `schedules[].dayOfWeek` | O | 1(월)~7(일) |
+| `schedules[].startTime` / `endTime` | O | `HH:mm`, 10분 단위, 시작 < 종료 |
+| `policy.settlementSessionCount` | O | 1~20 |
+| `policy.paymentTiming` | O | `PREPAID`(선불) / `POSTPAID`(후불) |
+| `policy.tuitionFee` | O | 10,000~10,000,000 (원) |
+| `account.bankName` | O | 1~20자 |
+| `account.accountNumber` | O | 숫자와 하이픈만, 숫자 10~14자리 |
+| `account.accountHolder` | O | 1~20자 |
+| `settings.parentUpdateFrequency` | O | `EVERY_SESSION` / `AT_SETTLEMENT` / `NONE` |
+| `settings.homeworkNotifyEnabled` | O | boolean |
+| `settings.unpaidReminderEnabled` | X | boolean. 없으면 `false` |
+| `invite.parents[]` | O | 1~2명 |
+| `invite.parents[].phone` | O | `010-?####-?####` (하이픈은 지우고 저장) |
+| `invite.parents[].label` | X | `MOTHER` / `FATHER` / `GUARDIAN`. 없으면 `GUARDIAN` |
+| `invite.studentPhone` | X | 학부모 번호와 같은 형식 |
+| `draftId` / `consultStudentId` / `curriculumId` | X | 아직 연결하지 않았다. 값이 오면 `TUTORING400_4` |
+
+```json
+{
+  "preset": { "skipped": false, "parentUpdateAnswer": "EVERY_SESSION" },
+  "student": { "name": "윤서아", "gradeLevel": 8, "gradeOther": null, "subjects": ["ENGLISH"], "subjectOther": null },
+  "textbooks": [ { "name": "수능특강 영어", "progressUnit": "CUSTOM", "customUnitLabel": "강", "startPosition": 0 } ],
+  "schedules": [ { "dayOfWeek": 3, "startTime": "18:00", "endTime": "19:30" } ],
+  "policy": { "settlementSessionCount": 8, "paymentTiming": "PREPAID", "tuitionFee": 400000 },
+  "account": { "bankName": "카카오뱅크", "accountNumber": "3333-01-1234567", "accountHolder": "한서윤" },
+  "settings": { "parentUpdateFrequency": "EVERY_SESSION", "homeworkNotifyEnabled": true, "unpaidReminderEnabled": true },
+  "invite": { "parents": [ { "phone": "010-1234-5678", "label": "MOTHER" } ], "studentPhone": "010-2345-6789" }
+}
+```
+
+- 검증은 두 단계다. **필드 규칙**(필수 · 길이 · 범위 · 형식, 학부모 3명 이상 포함)은 `COMMON400`이고 `result`에 필드별 메시지가 담긴다. **필드를 넘나드는 규칙**(기타 칸 · 운영 방식 답 · 요일 중복 · 수업 시간 · 번호 중복 · 미룬 필드)은 `TUTORING400_1`~`5`다. 저장 전에 모두 검사한다.
+- 학부모 3명 이상은 Notion의 409가 아니라 입력 규칙 위반이라 `COMMON400`이다.
+- 학생 번호(`invite.studentPhone`)가 없으면 학생 참여자를 만들지 않고, `homeworkNotifyEnabled`는 보낼 곳이 없어 `false`로 저장한다.
+- 은행 이름은 모든 공백과 끝의 '은행'을 지운 뒤 지원 은행 24곳과 맞춰 `bankCode`를 저장한다. 목록에 없으면 `bankCode`는 `null`이고 입력한 이름을 그대로 둔다.
+- `presetType` 판정: `skipped`면 `SIMPLE`, 아니면 `parentUpdateAnswer`로만 정한다 (`EVERY_SESSION` → `THOROUGH`, `AT_SETTLEMENT` → `SIMPLE`, `NONE` → `MINIMAL`). 숙제 알림은 영향을 주지 않는다.
+
+응답 (`201`):
+
+```json
+{
+  "tutoringId": 12,
+  "cycleId": 34,
+  "presetType": "THOROUGH",
+  "isFirstTutoring": true,
+  "firstLesson": { "date": "2026-12-02", "dayOfWeek": 3, "startTime": "18:00" },
+  "participants": [
+    { "participantId": 51, "role": "PARENT", "label": "MOTHER", "linkUrl": "https://sudam.app/l/..." },
+    { "participantId": 52, "role": "STUDENT", "label": null, "linkUrl": "https://sudam.app/l/..." }
+  ],
+  "hasPlan": false,
+  "firstInvoice": {
+    "invoiceId": 77, "invoiceName": "첫 8회차", "amount": 400000,
+    "bankCode": "090", "bankName": "카카오뱅크", "accountLast4": "4567", "accountHolder": "한서윤"
+  },
+  "studentInviteQueued": false
+}
+```
+
+- `isFirstTutoring`: 이 선생님의 첫 과외면 `true` (`teacher_profiles.first_tutoring_created_at`을 처음 기록할 때).
+- `firstLesson`: 오늘을 포함해 가장 빠른 회차. 오늘 수업이 이미 지난 시간이어도 오늘로 돌려준다. `dayOfWeek`는 1(월)~7(일).
+- `participants[]`: 학부모(`PARENT`)를 요청 순서대로, 학생(`STUDENT`)은 번호가 있을 때만 마지막에. 학생의 `label`은 `null`. `linkUrl`은 참여자별 초대 링크.
+- `firstInvoice`: **선불만** 발행하고 후불이면 `null`. `invoiceName`은 `첫 {settlementSessionCount}회차`. 계좌는 `bankCode` · `bankName` · `accountLast4` · `accountHolder`로 나눠 준다 (전체 번호는 내려주지 않는다).
+- `hasPlan` · `studentInviteQueued`: 아직 연결하지 않아 항상 `false`.
+
+| 상황 | HTTP | code |
+| --- | --- | --- |
+| 헤더 `Idempotency-Key` 없음 · UUID 아님 / 처리 중 / 같은 키 · 다른 요청 | 400 / 409 / 422 | `IDEMPOTENCY400_1` / `IDEMPOTENCY409_1` / `IDEMPOTENCY422_1` |
+| 필드 검증 실패 (`result`에 필드별 메시지, 학부모 3명 이상 포함) / 날짜 · 시간 · enum 형식 오류 (`result: null`) | 400 | `COMMON400` |
+| 같은 요일 일정 두 번 | 400 | `TUTORING400_1` |
+| 시작 ≥ 종료 · 10분 단위 아님 | 400 | `TUTORING400_2` |
+| 같은 번호 두 번 (학부모끼리 · 학부모와 학생, 하이픈을 지운 뒤 비교) | 400 | `TUTORING400_3` |
+| `draftId` · `consultStudentId` · `curriculumId`가 `null`이 아님 | 400 | `TUTORING400_4` |
+| 기타 칸 누락 (`gradeOther` · `subjectOther` · `customUnitLabel`) / `subjects` 중복 / `skipped=false`인데 `parentUpdateAnswer` 없음 | 400 | `TUTORING400_5` |
+| 선생님 프로필 없음 (등록 전) | 404 | `TUTORING404_1` |
+
+Notion 에러 이름 → 저장소 코드 (D9). 저장소는 코드 규칙(도메인 + 상태 + 순번)을 따르고, 이름은 `TutoringErrorCode` 상수명이다.
+
+| Notion 이름 | 저장소 코드 | 비고 |
+| --- | --- | --- |
+| `SCHEDULE_DUPLICATE_DAY` | `TUTORING400_1` | |
+| `INVALID_LESSON_TIME` | `TUTORING400_2` | |
+| `DUPLICATE_PHONE` | `TUTORING400_3` | |
+| `UNSUPPORTED_FIELD` | `TUTORING400_4` | |
+| `INVALID_INPUT` | `TUTORING400_5` | |
+| `TEACHER_PROFILE_NOT_FOUND` | `TUTORING404_1` | |
+| 학부모 초과 (409) | `COMMON400` | 409가 아니라 입력 규칙 위반 400 |
+| `CYCLE409_2` | (없음) | 새 과외라 발생하지 않는다. 생기면 버그 |
 
 ---
 

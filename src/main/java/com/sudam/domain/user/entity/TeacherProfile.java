@@ -16,6 +16,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.Set;
@@ -48,6 +49,10 @@ public class TeacherProfile extends BaseTimeEntity {
     @Column(nullable = false)
     private Set<Subject> subjects;
 
+    // 처음 과외를 만든 시각. 탭 잠금 해제 기준이라 과외를 모두 종료 · 삭제해도 지우지 않는다.
+    @Column(name = "first_tutoring_created_at")
+    private LocalDateTime firstTutoringCreatedAt;
+
     private TeacherProfile(User user, String name, Collection<Subject> subjects, String subjectOther) {
         this.user = user;
         update(name, subjects, subjectOther);
@@ -65,5 +70,17 @@ public class TeacherProfile extends BaseTimeEntity {
         this.name = name;
         this.subjects = EnumSet.copyOf(subjects);
         this.subjectOther = subjectOther;
+    }
+
+    /***
+     * 함수 기능: 첫 과외 생성 시각을 비어 있을 때만 기록한다.
+     * @return 이번 호출로 처음 기록했으면 true, 이미 값이 있어 그대로 두었으면 false
+     */
+    public boolean markFirstTutoringCreated(LocalDateTime at) {
+        if (this.firstTutoringCreatedAt != null) {
+            return false;
+        }
+        this.firstTutoringCreatedAt = at;
+        return true;
     }
 }
