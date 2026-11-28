@@ -128,6 +128,11 @@ class ScheduleControllerTest {
                 .andExpect(jsonPath("$.result.sessions[0].startTime").value("20:30"))
                 .andExpect(jsonPath("$.result.sessions[0].endTime").value("22:00"))
                 .andExpect(jsonPath("$.result.sessions[0].subjectName").value("영어"))
+                .andExpect(jsonPath("$.result.sessions[0].gradeLevel").value(8))
+                .andExpect(jsonPath("$.result.sessions[0].gradeOther").doesNotExist())
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].dayOfWeek").value(3))
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].startTime").value("20:30"))
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].endTime").value("22:00"))
                 .andExpect(jsonPath("$.result.sessions[0].cycle.noInCycle").value(3))
                 .andExpect(jsonPath("$.result.sessions[0].cycle.isPredicted").value(true))
                 .andExpect(jsonPath("$.result.sessions[0].action").value("RECORD"));

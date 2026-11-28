@@ -14,6 +14,7 @@ import com.sudam.domain.session.service.LessonCalendar;
 import com.sudam.domain.session.service.LessonSlot;
 import com.sudam.domain.tutoring.entity.Tutoring;
 import com.sudam.domain.tutoring.entity.TutoringPolicy;
+import com.sudam.domain.tutoring.entity.TutoringSchedule;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
 import com.sudam.domain.tutoring.enums.TutoringStatus;
 import com.sudam.domain.tutoring.repository.TutoringRepository;
@@ -221,6 +222,86 @@ class ScheduleServiceTest {
             assertThat(response.sessions()).isEmpty();
             assertThat(response.upcoming()).isEmpty();
             then(sessionRecordRepository).should(never()).findRecordedSessionIds(anyCollection());
+            then(tutoringScheduleRepository).should(never()).findEffectiveIn(anyCollection(), any(), any());
+        }
+
+        @Test
+        @DisplayName("정규 일정은 요일 → 시작 시각순으로 담는다")
+        void 정규_일정은_요일_시각순() {
+            // given
+            LessonSlot today = planned(SEOA_ID, SEOA_SCHEDULE_ID, TODAY, 18, 0);
+            givenActiveTutorings(seoa);
+            given(lessonCalendar.lessonsOf(List.of(seoa), TODAY, TODAY.plusWeeks(8))).willReturn(List.of(today));
+            givenTimelines(timeline(seoa, 8, List.of(today)));
+            given(tutoringScheduleRepository.findEffectiveIn(Set.of(SEOA_ID), TODAY, TODAY.plusWeeks(8)))
+                    .willReturn(List.of(
+                            schedule(seoa, 5, 18, LocalDate.of(2026, 9, 1), null),
+                            schedule(seoa, 3, 18, LocalDate.of(2026, 9, 1), null),
+                            schedule(seoa, 3, 16, LocalDate.of(2026, 9, 1), null)));
+
+            // when
+            DailyScheduleResponse response = scheduleService.daily(TEACHER_ID, null, null);
+
+            // then
+            assertThat(response.sessions().getFirst().regularSchedules())
+                    .extracting(DailyScheduleResponse.RegularSchedule::dayOfWeek,
+                            DailyScheduleResponse.RegularSchedule::startTime)
+                    .containsExactly(
+                            tuple(3, LocalTime.of(16, 0)),
+                            tuple(3, LocalTime.of(18, 0)),
+                            tuple(5, LocalTime.of(18, 0)));
+        }
+
+        @Test
+        @DisplayName("정규 일정은 카드 날짜에 적용 중인 것만 담아, 다음 주에 요일이 바뀌면 다가오는 수업 카드는 바뀐 일정을 받는다")
+        void 정규_일정은_카드_날짜_기준() {
+            // given: 수요일 일정은 다음 화요일(11/17)까지, 다음 수요일(11/18)부터는 목요일 일정
+            LocalDate oldRuleEnd = TODAY.plusDays(6);
+            LessonSlot tonight = planned(SEOA_ID, SEOA_SCHEDULE_ID, TODAY, 18, 0);
+            LessonSlot nextThursday = planned(SEOA_ID, 8L, TODAY.plusDays(8), 18, 0);
+            givenActiveTutorings(seoa);
+            given(lessonCalendar.lessonsOf(List.of(seoa), TODAY, TODAY.plusWeeks(8)))
+                    .willReturn(List.of(tonight, nextThursday));
+            givenTimelines(timeline(seoa, 8, List.of(tonight, nextThursday)));
+            given(tutoringScheduleRepository.findEffectiveIn(Set.of(SEOA_ID), TODAY, TODAY.plusWeeks(8)))
+                    .willReturn(List.of(
+                            schedule(seoa, 3, 18, LocalDate.of(2026, 9, 1), oldRuleEnd),
+                            schedule(seoa, 4, 18, oldRuleEnd.plusDays(1), null)));
+
+            // when
+            DailyScheduleResponse response = scheduleService.daily(TEACHER_ID, null, null);
+
+            // then
+            assertThat(response.sessions().getFirst().regularSchedules())
+                    .extracting(DailyScheduleResponse.RegularSchedule::dayOfWeek)
+                    .containsExactly(3);
+            assertThat(response.upcoming())
+                    .extracting(DailyScheduleResponse.Lesson::date)
+                    .containsExactly(TODAY, TODAY.plusDays(8));
+            assertThat(response.upcoming().get(1).regularSchedules())
+                    .extracting(DailyScheduleResponse.RegularSchedule::dayOfWeek)
+                    .containsExactly(4);
+        }
+
+        @Test
+        @DisplayName("학년은 카드 날짜의 학년도로 계산한다 (2026학년도 8학년 → 2027-03 카드는 9학년)")
+        void 학년은_카드_날짜_기준() {
+            // given
+            LocalDate nextSchoolYear = LocalDate.of(2027, 3, 3);
+            LessonSlot march = planned(SEOA_ID, SEOA_SCHEDULE_ID, nextSchoolYear, 18, 0);
+            givenActiveTutorings(seoa);
+            given(lessonCalendar.lessonsOf(List.of(seoa), nextSchoolYear, nextSchoolYear)).willReturn(List.of(march));
+            given(lessonCalendar.timelines(List.of(seoa), nextSchoolYear))
+                    .willReturn(Map.of(SEOA_ID, timeline(seoa, 8, List.of(march))));
+
+            // when
+            DailyScheduleResponse response = scheduleService.daily(TEACHER_ID, nextSchoolYear, null);
+
+            // then
+            assertThat(response.sessions()).singleElement().satisfies(lesson -> {
+                assertThat(lesson.gradeLevel()).isEqualTo(9);
+                assertThat(lesson.gradeOther()).isNull();
+            });
         }
 
         @Test
@@ -329,6 +410,16 @@ class ScheduleServiceTest {
         LocalTime start = LocalTime.of(hour, minute);
         return new LessonSlot(tutoringId, sessionId, scheduleId, scheduleId == null ? null : date, date, start,
                 start.plusMinutes(90), type, status, recognized, null, false);
+    }
+
+    // dayOfWeek 1(월)~7(일), hour 시 정각 시작 90분. effectiveTo는 빌더에 없어 리플렉션으로 넣는다.
+    private static TutoringSchedule schedule(Tutoring tutoring, int dayOfWeek, int hour, LocalDate effectiveFrom,
+                                             LocalDate effectiveTo) {
+        LocalTime start = LocalTime.of(hour, 0);
+        TutoringSchedule schedule = TutoringSchedule.builder().tutoring(tutoring).dayOfWeek(dayOfWeek)
+                .startTime(start).endTime(start.plusMinutes(90)).effectiveFrom(effectiveFrom).build();
+        ReflectionTestUtils.setField(schedule, "effectiveTo", effectiveTo);
+        return schedule;
     }
 
     private static Tutoring tutoring(Long id, String studentName, Collection<Subject> subjects) {
