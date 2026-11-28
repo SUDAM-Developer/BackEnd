@@ -17,6 +17,7 @@ import com.sudam.domain.tutoring.entity.TutoringPolicy;
 import com.sudam.domain.tutoring.enums.PaymentTiming;
 import com.sudam.domain.tutoring.enums.TutoringStatus;
 import com.sudam.domain.tutoring.repository.TutoringRepository;
+import com.sudam.domain.tutoring.repository.TutoringScheduleRepository;
 import com.sudam.domain.user.enums.Subject;
 import com.sudam.global.exception.ProjectException;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,6 +68,7 @@ class ScheduleServiceTest {
     @Mock private TutoringRepository tutoringRepository;
     @Mock private LessonCalendar lessonCalendar;
     @Mock private SessionRecordRepository sessionRecordRepository;
+    @Mock private TutoringScheduleRepository tutoringScheduleRepository;
 
     private ScheduleService scheduleService;
     private Tutoring seoa;
@@ -75,7 +77,8 @@ class ScheduleServiceTest {
     @BeforeEach
     void setUp() {
         Clock clock = Clock.fixed(TODAY.atTime(NOW).atZone(SEOUL).toInstant(), SEOUL);
-        scheduleService = new ScheduleService(tutoringRepository, lessonCalendar, sessionRecordRepository, clock);
+        scheduleService = new ScheduleService(tutoringRepository, lessonCalendar, sessionRecordRepository,
+                tutoringScheduleRepository, clock);
         seoa = tutoring(SEOA_ID, "김서아", List.of(Subject.MATH));
         doyun = tutoring(DOYUN_ID, "이도윤", List.of(Subject.MATH, Subject.ENGLISH));
     }
