@@ -43,7 +43,7 @@ com.sudam
 │   │       ├── SessionCycleReader      # 정산 포트 CycleSessionReader 구현 (MANDATORY)
 │   │       └── LessonCalendar          # 공통 예정 회차 계산기 (LessonExpander 펼치기 · CycleTimeline 사이클 예측, 결과는 LessonSlot)
 │   ├── schedule                        # 일정 탭 조회 (계산기 위의 얇은 조회, 엔티티 없음)
-│   │   ├── controller / service        # GET /api/v1/schedules/monthly · daily (ScheduleService)
+│   │   ├── controller / service        # GET /api/v1/schedules/monthly · daily (ScheduleService). daily = 일정 탭 날짜 목록 + 홈 오늘 수업
 │   │   ├── enums                       # LessonAction (RECORD · ADJUST · NONE)
 │   │   ├── dto/response                # MonthlyScheduleResponse, DailyScheduleResponse
 │   │   └── exception                   # ScheduleException, code/ScheduleErrorCode · ScheduleSuccessCode

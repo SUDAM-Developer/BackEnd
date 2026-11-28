@@ -77,4 +77,13 @@ public class TutoringSchedule {
         this.endTime = endTime;
         this.effectiveFrom = effectiveFrom;
     }
+
+    /***
+     * 함수 기능: 이 규칙이 그 날짜에 적용 중인지 확인한다. 시작일 · 종료일 당일도 포함한다.
+     * @param date 확인할 날짜
+     * @return effectiveFrom ≤ date ≤ effectiveTo(없으면 끝없음)이면 true
+     */
+    public boolean isEffectiveOn(LocalDate date) {
+        return !date.isBefore(effectiveFrom) && (effectiveTo == null || !date.isAfter(effectiveTo));
+    }
 }

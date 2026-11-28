@@ -12,8 +12,10 @@ import com.sudam.domain.session.service.CycleTimeline;
 import com.sudam.domain.session.service.LessonCalendar;
 import com.sudam.domain.session.service.LessonSlot;
 import com.sudam.domain.tutoring.entity.Tutoring;
+import com.sudam.domain.tutoring.entity.TutoringSchedule;
 import com.sudam.domain.tutoring.enums.TutoringStatus;
 import com.sudam.domain.tutoring.repository.TutoringRepository;
+import com.sudam.domain.tutoring.repository.TutoringScheduleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +24,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,10 +45,14 @@ public class ScheduleService {
     // daily '다가오는 수업'을 찾는 범위와 건수 (5.1.1 처리 규칙 5).
     private static final int UPCOMING_WEEKS = 8;
     private static final int UPCOMING_LIMIT = 3;
+    private static final Comparator<TutoringSchedule> REGULAR_SCHEDULE_ORDER = Comparator
+            .comparing(TutoringSchedule::getDayOfWeek)
+            .thenComparing(TutoringSchedule::getStartTime);
 
     private final TutoringRepository tutoringRepository;
     private final LessonCalendar lessonCalendar;
     private final SessionRecordRepository sessionRecordRepository;
+    private final TutoringScheduleRepository tutoringScheduleRepository;
     private final Clock clock;
 
     /***
@@ -100,10 +107,13 @@ public class ScheduleService {
         // 지난 날짜면 예측할 미래 회차가 없으니 오늘까지만 타임라인을 만든다.
         Map<Long, CycleTimeline> timelines = lessonCalendar.timelines(tutorings, until.isBefore(today) ? today : until);
         Set<Long> recorded = recordedSessionIds(Stream.concat(daySlots.stream(), upcomingSlots.stream()));
+        Map<Long, List<TutoringSchedule>> schedules =
+                regularSchedulesOf(Stream.concat(daySlots.stream(), upcomingSlots.stream()), target, until);
         Map<Long, Tutoring> tutoringById = tutorings.stream()
                 .collect(Collectors.toMap(Tutoring::getId, Function.identity()));
         Function<LessonSlot, DailyScheduleResponse.Lesson> toLesson = slot -> toLesson(slot,
-                tutoringById.get(slot.tutoringId()), timelines.get(slot.tutoringId()), recorded, today);
+                tutoringById.get(slot.tutoringId()), timelines.get(slot.tutoringId()), recorded,
+                schedules.getOrDefault(slot.tutoringId(), List.of()), today);
 
         return new DailyScheduleResponse(target, isToday, List.of(),
                 daySlots.stream().map(toLesson).toList(),
@@ -126,14 +136,28 @@ public class ScheduleService {
     }
 
     private DailyScheduleResponse.Lesson toLesson(LessonSlot slot, Tutoring tutoring, CycleTimeline timeline,
-                                                  Set<Long> recorded, LocalDate today) {
+                                                  Set<Long> recorded, List<TutoringSchedule> schedules,
+                                                  LocalDate today) {
         boolean hasRecord = slot.isStored() && recorded.contains(slot.sessionId());
-        // cancelReason · pendingTimeChange · makeup은 휴강 사유 컬럼 · 시간 변경(PR-10) · 보강 기능이 생기면 채운다.
-        return new DailyScheduleResponse.Lesson(slot.sessionId(), slot.scheduleId(), slot.originalDate(),
-                slot.date(), slot.startTime(), slot.endTime(), tutoring.getId(), tutoring.getStudentName(),
-                tutoring.subjectNames(), slot.sessionType(), slot.status(), null, hasRecord, slot.timeChanged(),
-                false, null, DailyScheduleResponse.Cycle.from(timeline.cycleOf(slot)),
+        // 다가오는 수업은 몇 주 뒤일 수 있어서, 학년 · 정규 일정은 고른 날짜가 아니라 그 카드의 날짜로 정한다.
+        List<DailyScheduleResponse.RegularSchedule> regularSchedules = schedules.stream()
+                .filter(schedule -> schedule.isEffectiveOn(slot.date()))
+                .map(DailyScheduleResponse.RegularSchedule::from)
+                .toList();
+        return DailyScheduleResponse.Lesson.of(slot, tutoring, timeline.cycleOf(slot), regularSchedules, hasRecord,
                 actionOf(slot, hasRecord, today));
+    }
+
+    // 카드에 나오는 과외의 조회 기간 정규 일정을 한 번에 읽어 과외별로 묶는다 (요일 → 시작 시각순). 카드가 없으면 읽지 않는다.
+    private Map<Long, List<TutoringSchedule>> regularSchedulesOf(Stream<LessonSlot> slots, LocalDate from,
+                                                                 LocalDate to) {
+        Set<Long> tutoringIds = slots.map(LessonSlot::tutoringId).collect(Collectors.toSet());
+        if (tutoringIds.isEmpty()) {
+            return Map.of();
+        }
+        return tutoringScheduleRepository.findEffectiveIn(tutoringIds, from, to).stream()
+                .sorted(REGULAR_SCHEDULE_ORDER)
+                .collect(Collectors.groupingBy(schedule -> schedule.getTutoring().getId(), Collectors.toList()));
     }
 
     private List<Tutoring> targetTutorings(Long teacherId, Long tutoringId) {

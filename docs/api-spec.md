@@ -440,6 +440,8 @@ Notion 에러 이름 → 저장소 코드 (D9). 저장소는 코드 규칙(도�
 
 `date` 없으면 오늘, `tutoringId` 있으면 그 과외만.
 
+일정 탭(T-11) 날짜 목록과 **홈 화면 오늘 수업(T-09)이 함께 쓰는 API**다. 홈은 `date` 없이 불러 `sessions`만 쓴다 (`events` · `upcoming`은 쓰지 않음). 홈 카드에 필요한 학생 이름 · 학년 · 과목 · 정규 일정 · 진행 회차는 `studentName` · `gradeLevel` · `subjectName` · `regularSchedules` · `cycle`에 있다.
+
 ```json
 {
   "date": "2026-11-11",
@@ -452,6 +454,11 @@ Notion 에러 이름 → 저장소 코드 (D9). 저장소는 코드 규칙(도�
       "tutoringId": 35, "studentName": "이도윤", "subjectName": "영어 · 수학",
       "sessionType": "REGULAR", "status": "SCHEDULED", "cancelReason": null,
       "hasRecord": false, "timeChanged": false, "pendingTimeChange": false, "makeup": null,
+      "gradeLevel": 8, "gradeOther": null,
+      "regularSchedules": [
+        { "dayOfWeek": 3, "startTime": "20:30", "endTime": "22:00" },
+        { "dayOfWeek": 6, "startTime": "14:00", "endTime": "15:30" }
+      ],
       "cycle": { "cycleNo": 1, "noInCycle": 3, "recognizedCount": 2, "settlementSessionCount": 4, "startsNewCycle": false, "isPredicted": true },
       "action": "RECORD"
     }
@@ -463,6 +470,8 @@ Notion 에러 이름 → 저장소 코드 (D9). 저장소는 코드 규칙(도�
 - `sessions`: 그날 수업, 시작 시각순. 저장 전 회차는 `sessionId: null`이고 (`scheduleId`, `originalDate`)로 기록 · 휴강 API에 보낸다.
 - `upcoming`: 오늘일 때만 지금 시각 이후 수업 최대 3건(8주 안, 휴강 포함). 오늘이 아니면 `[]`.
 - `subjectName`: 과목 순서대로 ` · `로 이음, 기타는 직접 입력한 과목명.
+- `gradeLevel` · `gradeOther`: **카드 날짜 기준** 현재 학년. 1~12 = 초1~고3, 0 = 기타(`gradeOther`에 직접 입력값). 학년도는 3월에 시작해 3월마다 하나씩 오르고, 고3을 넘으면 12, 기타는 0 그대로다.
+- `regularSchedules`: 그 과외의 정규 일정 중 **카드 날짜에 적용 중인 것**만, 요일(`dayOfWeek` 1=월~7=일) → 시작 시각순. 다가오는 수업 카드는 그 카드 날짜 기준이라, 요일을 바꾼 뒤의 카드는 바뀐 일정을 받는다.
 - `cycle`: 기록한 인정 회차는 확정 번호, 지난 미기록은 '지금 기록하면 될 번호'(인정 수 + 1), 앞으로의 예정은 남은 회차를 넘으면 다음 사이클(`startsNewCycle`), 미인정 휴강은 `noInCycle: null`.
 - `action`: 기록됨 · 휴강 · 보강 = `NONE`, 오늘 · 지난 미기록 정규 = `RECORD`, 앞으로의 정규 예정 = `ADJUST`. 정산이 끝난 날짜의 미기록 회차는 만들지 않는다.
 - 아직 고정값: `events` = `[]`(PR-9), `cancelReason` = `null`(휴강 사유 컬럼 전), `pendingTimeChange` = `false`(시간 변경 전), `makeup` = `null`(보강 전), `timeChanged` = `false`(시간 변경 컬럼 전).

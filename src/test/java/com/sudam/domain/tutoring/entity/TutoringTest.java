@@ -7,7 +7,10 @@ import com.sudam.domain.user.enums.Provider;
 import com.sudam.domain.user.enums.Subject;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -86,6 +89,32 @@ class TutoringTest {
 
         // then
         assertThat(names).isEqualTo("영어 · 논술");
+    }
+
+    @ParameterizedTest(name = "{0}: {1}학년({2}학년도 기준) → {3} 조회 시 {4}")
+    @CsvSource({
+            "같은 학년도,             10, 2026, 2026-11-27, 10",
+            "2월은 아직 지난 학년도,  10, 2026, 2027-02-28, 10",
+            "3월에 한 학년 오름,      10, 2026, 2027-03-01, 11",
+            "고3을 넘으면 12로 고정,  10, 2026, 2029-03-01, 12",
+            "기타(0)는 오르지 않음,    0, 2026, 2028-03-01, 0"
+    })
+    @DisplayName("현재 학년은 학년도(3월 시작)마다 하나씩 오르고, 기타는 그대로, 고3을 넘으면 12다")
+    void 현재_학년_계산(String situation, int gradeLevel, int gradeSchoolYear, LocalDate date, int expected) {
+        // given
+        Tutoring tutoring = Tutoring.builder()
+                .teacher(TEACHER)
+                .subjects(List.of(Subject.MATH))
+                .studentName("김민준")
+                .gradeLevel(gradeLevel)
+                .gradeSchoolYear(gradeSchoolYear)
+                .build();
+
+        // when
+        int current = tutoring.currentGradeLevel(date);
+
+        // then
+        assertThat(current).isEqualTo(expected);
     }
 
     private static Tutoring tutoring(List<Subject> subjects, String subjectOther) {

@@ -102,10 +102,17 @@ class ScheduleControllerTest {
     @DisplayName("그날 목록은 200 · SCHEDULE200_2이고 시각은 HH:mm, isToday · isPredicted 키를 그대로 내려준다")
     void 그날_목록_조회() throws Exception {
         // given
-        DailyScheduleResponse.Lesson lesson = new DailyScheduleResponse.Lesson(null, 9L, TODAY, TODAY,
-                LocalTime.of(20, 30), LocalTime.of(22, 0), 35L, "이도윤", "영어", SessionType.REGULAR,
-                SessionStatus.SCHEDULED, null, false, false, false, null,
-                new DailyScheduleResponse.Cycle(1, 3, 2, 4, false, true), LessonAction.RECORD);
+        DailyScheduleResponse.Lesson lesson = DailyScheduleResponse.Lesson.builder()
+                .scheduleId(9L).originalDate(TODAY).date(TODAY)
+                .startTime(LocalTime.of(20, 30)).endTime(LocalTime.of(22, 0))
+                .tutoringId(35L).studentName("이도윤").subjectName("영어")
+                .sessionType(SessionType.REGULAR).status(SessionStatus.SCHEDULED)
+                .gradeLevel(8)
+                .regularSchedules(List.of(
+                        new DailyScheduleResponse.RegularSchedule(3, LocalTime.of(20, 30), LocalTime.of(22, 0))))
+                .cycle(new DailyScheduleResponse.Cycle(1, 3, 2, 4, false, true))
+                .action(LessonAction.RECORD)
+                .build();
         given(scheduleService.daily(TEACHER_ID, TODAY, 35L)).willReturn(
                 new DailyScheduleResponse(TODAY, true, List.of(), List.of(lesson), List.of()));
 
@@ -121,6 +128,11 @@ class ScheduleControllerTest {
                 .andExpect(jsonPath("$.result.sessions[0].startTime").value("20:30"))
                 .andExpect(jsonPath("$.result.sessions[0].endTime").value("22:00"))
                 .andExpect(jsonPath("$.result.sessions[0].subjectName").value("영어"))
+                .andExpect(jsonPath("$.result.sessions[0].gradeLevel").value(8))
+                .andExpect(jsonPath("$.result.sessions[0].gradeOther").doesNotExist())
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].dayOfWeek").value(3))
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].startTime").value("20:30"))
+                .andExpect(jsonPath("$.result.sessions[0].regularSchedules[0].endTime").value("22:00"))
                 .andExpect(jsonPath("$.result.sessions[0].cycle.noInCycle").value(3))
                 .andExpect(jsonPath("$.result.sessions[0].cycle.isPredicted").value(true))
                 .andExpect(jsonPath("$.result.sessions[0].action").value("RECORD"));

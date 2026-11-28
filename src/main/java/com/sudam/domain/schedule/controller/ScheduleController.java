@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 import java.time.YearMonth;
 
-@Tag(name = "일정", description = "일정 탭 달력 · 날짜별 목록 API")
+@Tag(name = "일정", description = "일정 탭 달력 · 날짜별 목록 · 홈 오늘 수업 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/schedules")
@@ -38,8 +38,7 @@ public class ScheduleController {
     }
 
     @Operation(summary = "그날 일정 · 수업 조회",
-            description = "그날 수업(시각순)과, 오늘이면 지금 이후 다가오는 수업 3건을 돌려준다. date가 없으면 오늘. "
-                    + "tutoringId가 내 수업 중 과외가 아니면 SCHEDULE404_1.")
+            description = "그날 수업(시각순)과, 오늘이면 지금 이후 다가오는 수업 3건을 돌려준다. date가 없으면 오늘. ")
     @GetMapping("/daily")
     public ApiResponse<DailyScheduleResponse> daily(
             @AuthenticationPrincipal CustomOAuth2User principal,
